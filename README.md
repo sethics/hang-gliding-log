@@ -44,6 +44,34 @@ Back exports up somewhere private instead — `~/Documents`, a secret gist, or
 any private drive. This log backs a rating application; losing it means
 reconstructing the reconstruction.
 
+## Exporting
+
+All five outputs are generated client-side; nothing is uploaded anywhere.
+
+| Button | File | Contains |
+|---|---|---|
+| Flights CSV | `flight-log-YYYY-MM-DD.csv` | One row per flight, 11 columns. Clean tabular import for Sheets, Excel, or another logbook app. |
+| Everything CSV | `logbook-full-YYYY-MM-DD.csv` | Sectioned: pilot card, H3 gate status, flights, witnessed tasks, every glider checklist step, rebuild checklist and notes. |
+| Backup JSON | `logbook-backup-YYYY-MM-DD.json` | Complete state, pretty-printed. This is the one that restores. |
+| Print / PDF | — | Paginated logbook for a rating official. Browser print dialog, Save as PDF. |
+| Restore from JSON | — | Paste a previous JSON export to replace current state. |
+
+Downloads use a Blob URL. If that's blocked (inside the Claude artifact
+sandbox, for instance) the app falls back to showing the text with a Copy
+button, so nothing is ever unreachable.
+
+**Remember the exports are gitignored.** Save them somewhere private.
+
+### The print view
+
+Built on demand, rendered into `#printdoc`, styled entirely by the `@media
+print` block. Repeating table headers via `display:table-header-group`, no
+rows split across pages, and reconstructed entries marked with a double
+dagger plus their cited source. Ends with a signature line for the observer.
+
+Give this to whoever signs off the rating rather than a raw CSV. It reads as
+a logbook and it is honest about which entries are estimates.
+
 ## Tabs
 
 - **Log** — add / edit / delete flights, grouped by day. `Reconstructed` flags

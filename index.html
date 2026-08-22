@@ -135,6 +135,32 @@
 
   .hidden{display:none!important}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* ---------- print / PDF ---------- */
+  #printdoc{display:none}
+  @media print{
+    @page{margin:14mm 12mm}
+    body{background:#fff;color:#000}
+    .wrap,nav{display:none!important}
+    #printdoc{display:block!important}
+    .pr-head{border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:11pt}
+    .pr-title{font-family:var(--disp);text-transform:uppercase;font-size:23pt;letter-spacing:.02em;line-height:1}
+    .pr-meta{font-family:var(--mono);font-size:8.5pt;margin-top:5pt;line-height:1.55}
+    #printdoc table{border-collapse:collapse;width:100%}
+    #printdoc thead{display:table-header-group}
+    #printdoc tr{break-inside:avoid;page-break-inside:avoid}
+    #printdoc th{text-align:left;font-family:var(--mono);font-size:7.5pt;letter-spacing:.08em;
+      text-transform:uppercase;border-bottom:.9pt solid #000;padding:3pt 4pt}
+    #printdoc td{font-size:8.5pt;padding:3pt 4pt;border-bottom:.4pt solid #bbb;vertical-align:top}
+    #printdoc td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+    #printdoc td.nw{white-space:nowrap}
+    .pr-sum{margin-bottom:13pt}
+    .pr-sum td{font-size:9pt}
+    .pr-secn{font-family:var(--disp);text-transform:uppercase;font-size:12pt;letter-spacing:.06em;
+      margin:14pt 0 4pt;break-after:avoid}
+    .pr-foot{font-size:8pt;margin-top:11pt;line-height:1.55}
+    .pr-sign{margin-top:20pt;font-size:9pt}
+  }
 </style>
 
 <div class="wrap">
@@ -157,14 +183,16 @@
     <h2>Your data</h2>
     <p class="note">Saved automatically to <span id="storewhere">this browser</span>. Export a copy anyway — a rating application is worth backing up.</p>
     <div class="btnrow">
-      <button class="ghost" id="expcsv">Export CSV</button>
-      <button class="ghost" id="expjson">Export JSON</button>
+      <button class="ghost" id="expcsv">Flights CSV</button>
+      <button class="ghost" id="expall">Everything CSV</button>
+      <button class="ghost" id="expjson">Backup JSON</button>
+      <button class="ghost" id="printbtn">Print / PDF</button>
       <button class="ghost" id="impbtn">Restore from JSON</button>
     </div>
     <div class="f hidden" id="iobox" style="margin-top:12px">
       <label id="iolabel">Copy this</label>
       <textarea id="ioarea" rows="7"></textarea>
-      <div class="btnrow"><button class="ghost" id="iodo">Restore</button><button class="ghost" id="ioclose">Close</button></div>
+      <div class="btnrow"><button class="ghost" id="iodo">Restore</button><button class="ghost" id="iocopy">Copy</button><button class="ghost" id="ioclose">Close</button></div>
     </div>
   </div>
 
@@ -293,6 +321,8 @@
     </div>
   </section>
 </div>
+
+<div id="printdoc"></div>
 
 <nav>
   <button data-tab="log" class="on"><svg viewBox="0 0 24 24"><path d="M4 5h11l5 5v9H4z"/><path d="M15 5v5h5"/><path d="M7 13h8M7 16h5"/></svg>Log</button>
@@ -626,18 +656,141 @@ $('databtn').onclick=()=>$('datapanel').classList.toggle('hidden');
 function showIO(label,text,restore){
   $('iobox').classList.remove('hidden');$('iolabel').textContent=label;
   $('ioarea').value=text;$('iodo').classList.toggle('hidden',!restore);
+  $('iocopy').classList.toggle('hidden',restore);
   if(!restore){$('ioarea').select();}
 }
 $('ioclose').onclick=()=>$('iobox').classList.add('hidden');
-$('expjson').onclick=()=>showIO('Copy and keep this somewhere safe',JSON.stringify(state),false);
-$('expcsv').onclick=()=>{
-  const head=['Date','Site','Glider','Launch','Minutes','Solo','MaxAGL','Reconstructed','Source','Witness','Notes'];
-  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const rows=state.flights.slice().sort((a,b)=>a.date<b.date?-1:1)
-    .map(f=>[f.date,f.site,f.glider,f.launch,f.min,f.solo?'solo':'tandem',f.agl,f.est?'yes':'',f.src,f.witness,f.notes].map(q).join(','));
-  showIO('Paste into Sheets or Excel',[head.map(q).join(',')].concat(rows).join('\n'),false);
+$('iocopy').onclick=async()=>{
+  const t=$('ioarea').value;
+  try{ await navigator.clipboard.writeText(t); chip('copied','on'); }
+  catch(e){
+    $('ioarea').select();
+    try{ document.execCommand('copy'); chip('copied','on'); }
+    catch(_){ chip('select and copy by hand','bad'); }
+  }
 };
-$('impbtn').onclick=()=>showIO('Paste a previous JSON export, then Restore','',true);
+
+const stamp=()=>new Date().toISOString().slice(0,10);
+function download(name,text,mime){
+  try{
+    const b=new Blob([text],{type:(mime||'text/plain')+';charset=utf-8'});
+    const u=URL.createObjectURL(b), a=document.createElement('a');
+    a.href=u; a.download=name; a.style.display='none';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(u); a.remove();},1500);
+    return true;
+  }catch(e){ return false; }
+}
+function deliver(name,text,mime,label){
+  if(download(name,text,mime)) chip('saved '+name,'on');
+  else showIO(label+' \u2014 download blocked here, copy instead',text,false);
+}
+
+const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+const csvrow=a=>a.map(q).join(',');
+const sortedFlights=()=>state.flights.slice().sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
+
+function flightsCSV(){
+  const head=['Date','Site','Glider','Launch','Minutes','Solo','MaxAGL','Reconstructed','Source','Witness','Notes'];
+  return [csvrow(head)].concat(sortedFlights().map(f=>csvrow(
+    [f.date,f.site,f.glider,f.launch,f.min,f.solo?'solo':'tandem',f.agl,f.est?'yes':'',f.src,f.witness,f.notes]
+  ))).join('\r\n');
+}
+
+function everythingCSV(){
+  const s=stats(), p=state.pilot||{}, out=[];
+  out.push(csvrow(['PILOT']));
+  [['Name',p.name],['USHPA number',p.num],['Rating',p.rating],['Rating issued',p.rdate],
+   ['Membership expires',p.exp],['Special skills',p.skills],['Signed by',p.official],
+   ['Waiver on file',p.waiver],['Emergency contact',p.ice],['Notes',p.notes]
+  ].forEach(r=>out.push(csvrow(r)));
+  out.push('');
+
+  out.push(csvrow(['H3 LOGGED REQUIREMENTS']));
+  out.push(csvrow(['Gate','Logged','Required','Met']));
+  out.push(csvrow(['Flying days',s.days,REQ.days,s.days>=REQ.days?'yes':'no']));
+  out.push(csvrow(['Flights',s.flights,REQ.flights,s.flights>=REQ.flights?'yes':'no']));
+  out.push(csvrow(['Solo hours',s.soloHrs.toFixed(2),REQ.hours,s.soloHrs>=REQ.hours?'yes':'no']));
+  out.push(csvrow(['Total hours incl. tandem',s.allHrs.toFixed(2),'','']));
+  out.push('');
+
+  out.push(csvrow(['FLIGHTS']));
+  out.push(flightsCSV());
+  out.push('');
+
+  out.push(csvrow(['WITNESSED TASKS']));
+  out.push(csvrow(['Done','Task']));
+  TASKS.forEach((t,i)=>out.push(csvrow([state.tasks[i]?'yes':'',t])));
+  out.push('');
+
+  out.push(csvrow(['GLIDER CHECKLISTS']));
+  out.push(csvrow(['Glider','Where','Section','Step no.','Step','Ticked']));
+  state.gliders.forEach(g=>{
+    [['Setup',g.setup,'s'],['Preflight',g.pre,'p'],['Takedown',g.down,'d']].forEach(sec=>{
+      const lab=sec[0], lines=(sec[1]||'').split('\n').map(l=>l.trim()).filter(Boolean), k=sec[2];
+      if(!lines.length){ out.push(csvrow([g.name,g.where,lab,'','(none written yet)',''])); return; }
+      lines.forEach((l,i)=>out.push(csvrow([g.name,g.where,lab,i+1,l,state.steps[g.id+'|'+k+'|'+i]?'yes':''])));
+    });
+  });
+  out.push('');
+
+  out.push(csvrow(['REBUILD CHECKLIST']));
+  out.push(csvrow(['Done','Step']));
+  REBUILD.forEach(r=>out.push(csvrow([state.rebuild[r[0]]?'yes':'',r[1]])));
+  out.push('');
+  out.push(csvrow(['REBUILD NOTES']));
+  out.push(csvrow([state.rebuildNotes||'']));
+
+  return out.join('\r\n');
+}
+
+$('expcsv').onclick =()=>deliver('flight-log-'+stamp()+'.csv',flightsCSV(),'text/csv','Flights CSV');
+$('expall').onclick =()=>deliver('logbook-full-'+stamp()+'.csv',everythingCSV(),'text/csv','Everything CSV');
+$('expjson').onclick=()=>deliver('logbook-backup-'+stamp()+'.json',JSON.stringify(state,null,2),'application/json','Backup JSON');
+$('impbtn').onclick =()=>showIO('Paste a previous JSON export, then Restore','',true);
+
+/* ---------- print view ---------- */
+function buildPrint(){
+  const s=stats(), p=state.pilot||{}, rows=sortedFlights();
+  const cell=v=>'<td>'+esc(v==null?'':v)+'</td>';
+  const gate=(lab,got,req,ok)=>'<tr><td>'+lab+'</td><td class="num">'+got+'</td><td class="num">'+req+'</td><td>'+(ok?'met':'short')+'</td></tr>';
+  const idline=[p.name||'', p.num?'USHPA #'+p.num:'', p.rating||''].filter(Boolean).map(esc).join(' \u00b7 ');
+
+  let h='<div class="pr-head"><div class="pr-title">Hang Gliding Flight Log</div>'+
+        '<div class="pr-meta">'+(idline||'Pilot details not filled in')+'<br>Generated '+
+        new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})+'</div></div>';
+
+  h+='<table class="pr-sum"><thead><tr><th>H3 logged requirement</th><th>Logged</th><th>Required</th><th>Status</th></tr></thead><tbody>'+
+     gate('Flying days',s.days,REQ.days,s.days>=REQ.days)+
+     gate('Flights',s.flights,REQ.flights,s.flights>=REQ.flights)+
+     gate('Solo airtime',hm(s.soloHrs),REQ.hours+'h 00m',s.soloHrs>=REQ.hours)+
+     '<tr><td>Total airtime incl. tandem</td><td class="num">'+hm(s.allHrs)+'</td><td class="num">&mdash;</td><td>&mdash;</td></tr>'+
+     '</tbody></table>';
+
+  if(!rows.length){
+    h+='<p>No flights logged yet.</p>';
+  }else{
+    h+='<div class="pr-secn">Flights</div><table class="pr-log"><thead><tr>'+
+       '<th>Date</th><th>Site</th><th>Glider</th><th>Launch</th><th class="num">Min</th>'+
+       '<th class="num">AGL</th><th>Type</th><th>Witness</th><th>Notes</th></tr></thead><tbody>';
+    rows.forEach(f=>{
+      const note=[f.est?'\u2021 source: '+(f.src||'not stated'):'', f.notes||''].filter(Boolean).join(' \u2014 ');
+      h+='<tr><td class="nw">'+esc(fmtShort(f.date))+(f.est?' \u2021':'')+'</td>'+
+         cell(f.site)+cell(f.glider)+cell(f.launch)+
+         '<td class="num">'+(+f.min||0).toFixed(1)+'</td>'+
+         '<td class="num">'+esc(f.agl||'')+'</td>'+
+         '<td>'+(f.solo?'solo':'tandem')+'</td>'+cell(f.witness)+cell(note)+'</tr>';
+    });
+    h+='</tbody></table>';
+  }
+
+  if(rows.some(f=>f.est))
+    h+='<p class="pr-foot">\u2021 Reconstructed entry. The date and duration are a best estimate drawn from the source cited, not a contemporaneous record. Marked deliberately so a rating official can weigh it accordingly.</p>';
+
+  h+='<p class="pr-sign">Reviewed by: ______________________________ &nbsp;&nbsp; USHPA #: ______________ &nbsp;&nbsp; Date: ______________</p>';
+  $('printdoc').innerHTML=h;
+}
+$('printbtn').onclick=()=>{ buildPrint(); setTimeout(()=>window.print(),100); };
 $('iodo').onclick=()=>{
   try{ const d=JSON.parse($('ioarea').value);
     if(!d||!Array.isArray(d.flights))throw 0;
