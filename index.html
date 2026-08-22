@@ -282,10 +282,11 @@
   <section id="tab-glide" class="hidden">
     <div class="card">
       <h2>Gliders</h2>
-      <div class="warn"><b>These lists start empty on purpose.</b> Assembly is the one thing you don't want a generic checklist for. Walk a setup with John or a Lookout instructor, write down what they actually do for that exact glider, and type it in here. Cross-check against the manufacturer's manual.</div>
+      <div class="warn"><b>The Falcon / Alpha lists are transcribed from Lookout's laminated sheets</b>, wording unaltered. They cover the glider only — not your harness, reserve, hang check or hook-in. Check them against the sheet on the setup table, and ask an instructor about anything that reads differently on the glider in front of you.</div>
       <div class="gtabs" id="gtabs"></div>
       <div id="gbody"></div>
       <div class="btnrow">
+        <button class="ghost" id="addpreset">+ Falcon / Alpha preset</button>
         <button class="ghost" id="addglider">+ Add glider</button>
         <button class="ghost" id="editsteps">Edit steps</button>
         <button class="ghost" id="uncheckall">Clear ticks</button>
@@ -380,6 +381,51 @@ const REBUILD=[
  ['observer',"Show the reconstructed log to your observer before you rely on it"]
 ];
 
+/* Transcribed verbatim from the laminated "Falcon and Alpha Set Up" and
+   "Falcon and Alpha Break Down" sheets at Lookout Mountain Flight Park.
+   Wording is theirs and deliberately unaltered — these are assembly steps,
+   and paraphrasing them would be a safety change disguised as an edit.
+   Verify against the sheet and your instructor before relying on it. */
+const PRESETS=[{
+  name:'Wills Wing Falcon / Alpha',
+  where:'Lookout Mountain Flight Park \u2014 from the laminated setup sheets',
+  setup:[
+    'Do not remove any bag or padding until instructed to do so. Keep all bags, padding and ties for your glider together.',
+    'Unzip the bag. Remove the battens, and remove the cover from the downtubes. Lift up the downtubes.',
+    'Insure none of the wires are tangled and attach the nose wire while downtubes are upright and together.',
+    'Attach the appropriate basetube to the downtube fittings. Make sure the safeties are on the end of the bolts and the bolts are facing down. *** Make sure that the bolt passes through both the bracket and the basetube, thus securing the basetube to the bracket.',
+    'Pick up the nose of the glider and stand the glider over onto its wheels. Remove the glider bag.',
+    'Remove the glider ties and the kingpost cover. GENTLY open the wings of the glider, spreading one wing and then the other, alternating until the wings are fully extended.',
+    'Raise the kingpost to a vertical position. Insert the luffline ring into the hook on top of the kingpost. Make sure none of the lufflines are twisted.',
+    'Separate the ribs. White ribs go on the Left, Black on the Right. (The two shortest ribs might both be black.)',
+    'Insert 3 ribs in each side (curve down) starting at the inboard working outboard.',
+    'Remove the nose wire to make it easier to tension the glider. Locate the haulback cable at the center rear of the sail. Tension the glider by pulling the haulback cable. Attach the metal haulback tang (not the string) to the metal post at the rear of the keel. Reattach the nose wire.',
+    'Remove the tip bags and insert the last 3 outside ribs. If you are unfamiliar with the tip ribs, ask for assistance.',
+    'Secure the nose rib. It should rest in the center of the keel.'
+  ].join('\n'),
+  pre:[
+    'All bolts should have at least two threads exposed.',
+    'All wires should be free of kinks and frays.',
+    'All rib tips should be secured.',
+    'Sail checked for any tears or holes.',
+    'Ask an instructor if you have any questions during your preflight \u2014 there are no stupid questions.'
+  ].join('\n'),
+  down:[
+    'Move the nose rib off to the side of the keel.',
+    'Remove 3 ribs from each wing tip. Roll up the tips and place the tip bags on the tips. Do NOT detension the glider without putting the tip bags on!',
+    'Detension the glider by removing the metal keyhole tang from the metal post at the rear of the keel.',
+    'Remove the remaining ribs, place all ribs in the rib bag, curved ends together.',
+    'Remove the luffline ring from the hook on top of the kingpost, and secure the ring in the bungee behind the kingpost or the stretchy sleeve that is around the base of the kingpost.',
+    'Fold the kingpost down and GENTLY bring in the wings a little at a time. Pull the sail up and over the leading edges to the outside of the wing. Place small kingpost bag over end of kingpost.',
+    'Roll the sails up and put two 1" ties on each wing, 2" tie on glider between nose and kingpost routed over the keel.',
+    'Place the bag on the glider. The Wills Wing logo should go over the nose of the glider.',
+    'Gently roll the glider over onto the ground so it lays on the bag.',
+    'Disconnect the basetube from each downtube. Bolts, wingnuts and safeties stay with the basetube.',
+    'Disconnect the nose wire and place the cover over the downtube ends. Fold the downtubes towards the rear of the glider. Make sure the hangstraps are not preventing the downtubes from laying flat.',
+    'The ribs should be placed in the rear of the glider between the rear leading edges, curves towards the wingtips. Zip up the bag. Stow glider and basetube in storage container.'
+  ].join('\n')
+}];
+
 const BLANK={version:1,flights:[],gliders:[],tasks:{},rebuild:{},rebuildNotes:'',cur:0,steps:{},
   pilot:{name:'',num:'',rating:'H2',rdate:'',exp:'',skills:'',official:'',waiver:'',ice:'',notes:''}};
 let state=JSON.parse(JSON.stringify(BLANK));
@@ -401,8 +447,8 @@ async function load(){
   }catch(e){ chip('new log',''); }
   if(!state.gliders.length){
     state.gliders=[
-      {id:uid(),name:'California glider',where:'with John Heiney',setup:'',pre:'',down:''},
-      {id:uid(),name:'Lookout glider',where:'Lookout Mountain Flight Park',setup:'',pre:'',down:''}
+      Object.assign({},PRESETS[0],{id:uid(),name:'Falcon 170'}),
+      {id:uid(),name:'California glider',where:'with John Heiney',setup:'',pre:'',down:''}
     ];
   }
   renderAll();
@@ -631,6 +677,9 @@ $('gbody').onchange=e=>{const k=e.target.dataset.step;if(!k)return;
   state.steps[k]=e.target.checked;save();renderGliders();};
 $('uncheckall').onclick=()=>{const g=state.gliders[state.cur];if(!g)return;
   Object.keys(state.steps).forEach(k=>{if(k.startsWith(g.id+'|'))delete state.steps[k]});save();renderGliders();};
+$('addpreset').onclick=()=>{
+  state.gliders.push(Object.assign({},PRESETS[0],{id:uid()}));
+  state.cur=state.gliders.length-1;save();renderGliders();renderLog();openEdit();};
 $('addglider').onclick=()=>{
   state.gliders.push({id:uid(),name:'New glider',where:'',setup:'',pre:'',down:''});
   state.cur=state.gliders.length-1;save();renderGliders();openEdit();};
