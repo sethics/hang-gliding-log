@@ -1,0 +1,653 @@
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flight Log — H2 to H3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --paper:#E4EBEF;
+    --card:#FBFCFD;
+    --ink:#0F2230;
+    --ink2:#4C6475;
+    --ink3:#8AA0AE;
+    --line:#C6D3DA;
+    --mag:#B3266B;
+    --blue:#2C5F8E;
+    --tan:#B8873F;
+    --good:#2F7A5B;
+    --disp:'Barlow Condensed','Oswald',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+  .wrap{max-width:540px;margin:0 auto;padding:0 14px 108px}
+
+  /* ---------- header ---------- */
+  header{position:relative;padding:18px 0 14px;overflow:hidden}
+  .ridge{position:absolute;inset:auto 0 0 0;height:46px;opacity:.5;pointer-events:none}
+  .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--mag);margin:0 0 2px}
+  h1{font-family:var(--disp);font-weight:700;font-size:34px;line-height:.95;letter-spacing:.01em;text-transform:uppercase;margin:0}
+  .sub{font-family:var(--mono);font-size:11px;color:var(--ink2);margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .savechip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .savechip.on{color:var(--good)}
+  .savechip.bad{color:var(--mag)}
+  .linkbtn{background:none;border:none;padding:0;font-family:var(--mono);font-size:11px;color:var(--blue);text-decoration:underline;cursor:pointer}
+
+  /* ---------- cards ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:16px 14px;margin:0 0 12px}
+  .card h2{font-family:var(--disp);text-transform:uppercase;font-size:20px;letter-spacing:.02em;margin:0 0 3px;font-weight:600}
+  .card h3{font-family:var(--disp);text-transform:uppercase;font-size:15px;letter-spacing:.06em;margin:16px 0 6px;color:var(--ink2);font-weight:600}
+  .note{font-size:12.5px;color:var(--ink2);margin:0 0 12px}
+  .warn{border-left:3px solid var(--tan);background:#FBF6EE;padding:9px 11px;font-size:12.5px;color:#5B4526;margin:0 0 12px;border-radius:2px}
+
+  /* ---------- tapes (signature) ---------- */
+  .tapes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 4px}
+  .tape{position:relative}
+  .tapenum{font-family:var(--mono);font-size:19px;font-weight:600;line-height:1;letter-spacing:-.02em}
+  .tapenum span{font-size:11px;color:var(--ink3);font-weight:400}
+  .tapebar{position:relative;height:132px;margin-top:7px;background:#EDF2F5;border:1px solid var(--line);border-radius:2px;overflow:hidden}
+  .tapefill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--mag),#8E1B54);transition:height .6s cubic-bezier(.2,.7,.3,1)}
+  .tapefill.done{background:linear-gradient(180deg,var(--good),#1F5740)}
+  .ticks{position:absolute;inset:0;background-image:repeating-linear-gradient(to top,transparent 0 12px,rgba(15,34,48,.16) 12px 13px);mix-blend-mode:multiply}
+  .tapelab{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-top:7px}
+  .tapereq{font-family:var(--mono);font-size:9.5px;color:var(--ink3)}
+
+  /* ---------- forms ---------- */
+  label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink2);margin:0 0 4px}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    width:100%;padding:10px;font-family:var(--body);font-size:16px;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:2px;appearance:none}
+  textarea{font-family:var(--mono);font-size:13px;line-height:1.7;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+  .f{margin-bottom:10px}
+  .checkrow{display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 12px}
+  .chk{display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+  .chk input{width:19px;height:19px;accent-color:var(--mag);margin:0;flex:0 0 auto}
+  button.primary{width:100%;padding:13px;background:var(--mag);color:#fff;border:none;border-radius:2px;
+    font-family:var(--disp);text-transform:uppercase;letter-spacing:.09em;font-size:17px;font-weight:600;cursor:pointer}
+  button.ghost{padding:9px 12px;background:none;border:1px solid var(--line);border-radius:2px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);cursor:pointer}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+  /* ---------- flight list ---------- */
+  .daygroup{margin-top:14px}
+  .dayhead{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:3px;margin-bottom:2px}
+  .daydate{font-family:var(--disp);text-transform:uppercase;font-size:16px;letter-spacing:.04em;font-weight:600}
+  .daymeta{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.05em}
+  .flt{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #E6EDF1;cursor:pointer}
+  .fltdur{font-family:var(--mono);font-size:14px;font-weight:600;min-width:52px;text-align:right;color:var(--blue)}
+  .fltmain{flex:1;min-width:0}
+  .fltsite{font-weight:600;font-size:14px}
+  .fltsub{font-family:var(--mono);font-size:11px;color:var(--ink2);margin-top:1px;word-break:break-word}
+  .tag{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+    padding:1px 5px;border-radius:2px;margin-right:5px;vertical-align:1px}
+  .tag.est{background:#F6EDDD;color:var(--tan);border:1px solid #E4CEA6}
+  .tag.tan2{background:#EAF0F5;color:var(--blue);border:1px solid #CBDCE9}
+  .del{background:none;border:none;color:var(--ink3);font-size:19px;line-height:1;padding:0 2px;cursor:pointer}
+  .empty{font-family:var(--mono);font-size:12.5px;color:var(--ink2);padding:18px 0;text-align:center}
+
+  /* ---------- pilot card ---------- */
+  .pcard{background:linear-gradient(150deg,#123449,#0F2230 62%);color:#EAF1F5;border-radius:4px;padding:15px 15px 13px;position:relative;overflow:hidden}
+  .pcard:after{content:'';position:absolute;right:-38px;top:-46px;width:150px;height:150px;border:1px solid rgba(234,241,245,.14);border-radius:50%}
+  .pcard:before{content:'';position:absolute;right:-14px;top:-22px;width:104px;height:104px;border:1px solid rgba(234,241,245,.1);border-radius:50%}
+  .pceyebrow{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:#7FA4BB}
+  .pcname{font-family:var(--disp);text-transform:uppercase;font-size:25px;letter-spacing:.02em;font-weight:600;line-height:1.05;margin:3px 0 10px}
+  .pcgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px 14px;position:relative;z-index:1}
+  .pcf .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#7FA4BB}
+  .pcf .v{font-family:var(--mono);font-size:14px;font-weight:500;margin-top:2px;word-break:break-word}
+  .pcf .v.dim{color:#5E8299;font-weight:400}
+  .pcbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:13px;padding-top:11px;border-top:1px solid rgba(234,241,245,.16);position:relative;z-index:1}
+  .pcexp{font-family:var(--mono);font-size:10.5px;color:#7FA4BB}
+  .pcexp.soon{color:#E9A65C}.pcexp.gone{color:#F08AB0}
+  .pcedit{background:none;border:1px solid rgba(234,241,245,.3);color:#EAF1F5;border-radius:2px;padding:5px 10px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;cursor:pointer}
+
+  /* ---------- tasks ---------- */
+  ul.tasks{list-style:none;margin:0;padding:0}
+  ul.tasks li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #E6EDF1;font-size:13.5px;align-items:flex-start}
+  ul.tasks li input{width:19px;height:19px;accent-color:var(--good);margin:2px 0 0;flex:0 0 auto}
+  ul.tasks li.done label{color:var(--ink3);text-decoration:line-through}
+  ul.tasks li label{margin:0;font-family:var(--body);font-size:13.5px;letter-spacing:0;text-transform:none;color:var(--ink);line-height:1.45}
+
+  /* ---------- gliders ---------- */
+  .gtabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px}
+  .gtab{flex:0 0 auto;padding:7px 11px;border:1px solid var(--line);background:#fff;border-radius:2px;
+    font-family:var(--disp);text-transform:uppercase;font-size:14px;letter-spacing:.05em;color:var(--ink2);cursor:pointer;white-space:nowrap}
+  .gtab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .steps{list-style:none;margin:0;padding:0}
+  .steps li{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid #E6EDF1;align-items:flex-start;font-size:13.5px}
+  .steps li input{width:20px;height:20px;accent-color:var(--blue);margin:1px 0 0;flex:0 0 auto}
+  .steps li.done span{color:var(--ink3);text-decoration:line-through}
+  .stepnum{font-family:var(--mono);font-size:10px;color:var(--ink3);min-width:16px;padding-top:3px}
+
+  /* ---------- nav ---------- */
+  nav{position:fixed;left:0;right:0;bottom:0;background:rgba(251,252,253,.97);border-top:1px solid var(--line);
+    display:flex;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;background:none;border:none;padding:11px 2px 12px;cursor:pointer;color:var(--ink3);
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+    display:flex;flex-direction:column;align-items:center;gap:4px;border-top:2px solid transparent;margin-top:-1px}
+  nav button.on{color:var(--mag);border-top-color:var(--mag)}
+  nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+  .hidden{display:none!important}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <svg class="ridge" viewBox="0 0 540 46" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0,44 L70,26 L120,34 L190,10 L250,30 L320,18 L390,36 L450,22 L540,40" fill="none" stroke="#B8873F" stroke-width="1"/>
+      <path d="M0,46 L70,32 L120,39 L190,20 L250,36 L320,26 L390,41 L450,30 L540,44" fill="none" stroke="#C6D3DA" stroke-width="1"/>
+    </svg>
+    <p class="kicker">USHPA H2 → H3</p>
+    <h1>Flight Log</h1>
+    <div class="sub">
+      <span id="hdrstat">—</span>
+      <span class="savechip" id="savechip">loading</span>
+      <button class="linkbtn" id="databtn">data</button>
+    </div>
+  </header>
+
+  <!-- DATA PANEL -->
+  <div class="card hidden" id="datapanel">
+    <h2>Your data</h2>
+    <p class="note">Saved automatically to <span id="storewhere">this browser</span>. Export a copy anyway — a rating application is worth backing up.</p>
+    <div class="btnrow">
+      <button class="ghost" id="expcsv">Export CSV</button>
+      <button class="ghost" id="expjson">Export JSON</button>
+      <button class="ghost" id="impbtn">Restore from JSON</button>
+    </div>
+    <div class="f hidden" id="iobox" style="margin-top:12px">
+      <label id="iolabel">Copy this</label>
+      <textarea id="ioarea" rows="7"></textarea>
+      <div class="btnrow"><button class="ghost" id="iodo">Restore</button><button class="ghost" id="ioclose">Close</button></div>
+    </div>
+  </div>
+
+  <!-- ============ LOG ============ -->
+  <section id="tab-log">
+    <div class="card">
+      <h2 id="formtitle">Add a flight</h2>
+      <p class="note" id="formnote">Backfilling an old flight? Tick <b>Reconstructed</b> and say where the date came from.</p>
+      <div class="row">
+        <div><label for="f-date">Date</label><input type="date" id="f-date"></div>
+        <div><label for="f-min">Airtime (min)</label><input type="number" id="f-min" step="0.1" min="0" placeholder="0.5"></div>
+      </div>
+      <div class="f"><label for="f-site">Site</label><input type="text" id="f-site" list="sites" placeholder="Lookout Mountain"></div>
+      <datalist id="sites">
+        <option>Lookout Mountain Flight Park</option><option>Lookout — training hill</option>
+        <option>Torrey Pines Gliderport</option><option>Dockweiler Beach</option><option>Soboba</option>
+        <option>Marshall / Crestline</option><option>Blossom Valley</option><option>Lake Elsinore</option>
+        <option>Sylmar</option><option>Point of the Mountain, UT</option>
+      </datalist>
+      <div class="row">
+        <div><label for="f-glider">Glider</label><input type="text" id="f-glider" list="gliderlist" placeholder="Falcon 4 195"></div>
+        <div><label for="f-launch">Launch</label>
+          <select id="f-launch">
+            <option>Foot — training hill</option><option>Foot — mountain</option>
+            <option>Aerotow</option><option>Platform / static tow</option><option>Scooter tow</option><option>Other</option>
+          </select></div>
+      </div>
+      <datalist id="gliderlist"></datalist>
+      <div class="row">
+        <div><label for="f-agl">Max AGL (ft)</label><input type="number" id="f-agl" min="0" placeholder="1500"></div>
+        <div><label for="f-witness">Instructor / witness</label><input type="text" id="f-witness" placeholder="John Heiney"></div>
+      </div>
+      <div class="checkrow">
+        <label class="chk"><input type="checkbox" id="f-solo" checked> Solo (counts toward the 10 hrs)</label>
+        <label class="chk"><input type="checkbox" id="f-est"> Reconstructed</label>
+      </div>
+      <div class="f hidden" id="srcwrap"><label for="f-src">Where this came from</label>
+        <input type="text" id="f-src" placeholder="Video timestamp / John's email 7/26 / photo EXIF"></div>
+      <div class="f"><label for="f-notes">Conditions &amp; notes</label><textarea id="f-notes" rows="2" placeholder="Light cross, blew the flare"></textarea></div>
+      <button class="primary" id="savebtn">Log it</button>
+      <div class="btnrow hidden" id="cancelrow"><button class="ghost" id="cancelbtn">Cancel edit</button></div>
+    </div>
+    <div class="card">
+      <h2>Logbook</h2>
+      <p class="note" id="logsummary"></p>
+      <div id="loglist"></div>
+    </div>
+  </section>
+
+  <!-- ============ PROGRESS ============ -->
+  <section id="tab-prog" class="hidden">
+    <div class="card">
+      <div id="pcardview"></div>
+      <div class="hidden" id="pcedit" style="margin-top:14px">
+        <div class="f"><label for="p-name">Name as it appears on the card</label><input type="text" id="p-name"></div>
+        <div class="row">
+          <div><label for="p-num">USHPA number</label><input type="text" id="p-num" inputmode="numeric"></div>
+          <div><label for="p-rating">Rating</label><input type="text" id="p-rating" placeholder="H2"></div>
+        </div>
+        <div class="row">
+          <div><label for="p-rdate">Rating issued</label><input type="date" id="p-rdate"></div>
+          <div><label for="p-exp">Membership expires</label><input type="date" id="p-exp"></div>
+        </div>
+        <div class="f"><label for="p-skills">Special skills</label><input type="text" id="p-skills" placeholder="AT, FL, ST, TUR…"></div>
+        <div class="f"><label for="p-official">Rating signed by</label><input type="text" id="p-official" placeholder="Instructor or observer, and their USHPA number"></div>
+        <div class="f"><label for="p-waiver">Waiver on file</label><input type="text" id="p-waiver" placeholder="Date sent to USHPA"></div>
+        <div class="f"><label for="p-ice">Emergency contact</label><input type="text" id="p-ice" placeholder="Name and number"></div>
+        <div class="f"><label for="p-notes">Other card details</label><textarea id="p-notes" rows="3" placeholder="Chapter, region, anything else on the card"></textarea></div>
+        <p class="note">Stored in plain text alongside the rest of your log — fine for a membership number, not the place for anything you'd guard like a password.</p>
+        <div class="btnrow"><button class="ghost" id="pcdone">Done</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Distance to H3</h2>
+      <p class="note">Three separate gates. All three have to clear.</p>
+      <div class="tapes" id="tapes"></div>
+      <p class="note" style="margin-top:16px" id="gatenote"></p>
+    </div>
+    <div class="card">
+      <h2>Witnessed tasks</h2>
+      <div class="warn">Paraphrased from USHPA's Pilot Proficiency Program so you can track it — the SOP your observer signs against is the authority. Pull the current version from ushpa.org before you apply.</div>
+      <ul class="tasks" id="tasklist"></ul>
+    </div>
+  </section>
+
+  <!-- ============ GLIDERS ============ -->
+  <section id="tab-glide" class="hidden">
+    <div class="card">
+      <h2>Gliders</h2>
+      <div class="warn"><b>These lists start empty on purpose.</b> Assembly is the one thing you don't want a generic checklist for. Walk a setup with John or a Lookout instructor, write down what they actually do for that exact glider, and type it in here. Cross-check against the manufacturer's manual.</div>
+      <div class="gtabs" id="gtabs"></div>
+      <div id="gbody"></div>
+      <div class="btnrow">
+        <button class="ghost" id="addglider">+ Add glider</button>
+        <button class="ghost" id="editsteps">Edit steps</button>
+        <button class="ghost" id="uncheckall">Clear ticks</button>
+      </div>
+      <div class="hidden" id="editbox" style="margin-top:14px">
+        <div class="f"><label for="e-name">Glider</label><input type="text" id="e-name"></div>
+        <div class="f"><label for="e-where">Where you fly it</label><input type="text" id="e-where" placeholder="Lookout Mountain, aerotow"></div>
+        <div class="f"><label for="e-setup">Setup — one step per line</label><textarea id="e-setup" rows="8"></textarea></div>
+        <div class="f"><label for="e-pre">Preflight — one step per line</label><textarea id="e-pre" rows="8"></textarea></div>
+        <div class="f"><label for="e-down">Takedown — one step per line</label><textarea id="e-down" rows="7"></textarea></div>
+        <div class="btnrow"><button class="ghost" id="esave">Save glider</button><button class="ghost" id="edel">Delete glider</button><button class="ghost" id="eclose">Close</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REBUILD ============ -->
+  <section id="tab-rebuild" class="hidden">
+    <div class="card">
+      <h2>Rebuilding the record</h2>
+      <p class="note">You can't invent flights, but you can find evidence of the ones you made. Work the sources below, then log what each one proves — flagged as reconstructed, with the source named. An honest estimate you can defend is worth far more to an observer than a tidy number you can't.</p>
+      <ul class="tasks" id="rebuildlist"></ul>
+      <h3>Notes to self</h3>
+      <textarea id="rebuildnotes" rows="6" placeholder="Who I asked, what came back, what's still missing…"></textarea>
+    </div>
+    <div class="card">
+      <h2>What to ask for</h2>
+      <h3>John Heiney</h3>
+      <p class="note">Ask for dates first, counts second — dates are what he's likely to actually have, and flying days is a gate on its own. Specifically: which days you flew with him, roughly how many flights per day, the glider and size, the site, and whether he still has any of the footage with timestamps. His video files are dated evidence.</p>
+      <h3>Lookout Mountain Flight Park</h3>
+      <p class="note">Schools keep student progress cards and tow logs, and Lookout runs a big enough operation that yours probably exists on paper. Ask the front office for a copy of your student record and any tow-log entries under your name and USHPA number, plus the date your H2 was signed off and by whom.</p>
+      <h3>Your own archive</h3>
+      <p class="note">Lookout's booking confirmations are the strongest thread you have — one email per day you showed up, already dated, already in your inbox. Search Gmail for <span style="font-family:var(--mono);font-size:11.5px">flylookout.com</span> and sort oldest first. Photo and video EXIF gives exact dates and often times. WeTransfer emails date the footage. Card charges and lesson invoices date the rest. USHPA has your membership and rating dates.</p>
+    </div>
+  </section>
+</div>
+
+<nav>
+  <button data-tab="log" class="on"><svg viewBox="0 0 24 24"><path d="M4 5h11l5 5v9H4z"/><path d="M15 5v5h5"/><path d="M7 13h8M7 16h5"/></svg>Log</button>
+  <button data-tab="prog"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>H3</button>
+  <button data-tab="glide"><svg viewBox="0 0 24 24"><path d="M12 4 2 15h20z"/><path d="M12 4v11"/></svg>Gliders</button>
+  <button data-tab="rebuild"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>Rebuild</button>
+</nav>
+
+<script>
+const KEY='hg-logbook-v1';
+/* Works in two places: inside Claude it uses the artifact store, as a local
+   file it falls back to this browser's localStorage. Same data shape either way. */
+const store={
+  where: (typeof window.storage!=='undefined'&&window.storage) ? 'Claude' : 'this browser',
+  async get(k){
+    if(typeof window.storage!=='undefined'&&window.storage) return window.storage.get(k);
+    const v=localStorage.getItem(k); if(v==null) throw new Error('no key'); return {key:k,value:v};
+  },
+  async set(k,v){
+    if(typeof window.storage!=='undefined'&&window.storage) return window.storage.set(k,v);
+    localStorage.setItem(k,v); return {key:k,value:v};
+  }
+};
+const REQ={days:30,flights:90,hours:10};
+
+const TASKS=[
+ "Right-of-way rules, FAR 103, sectional charts and airspace you must avoid",
+ "Airspeed control, stalls, spins and adverse yaw",
+ "Read and understand the owner's manual for the glider you fly",
+ "Current USHPA accident report findings",
+ "Give a verbal read of the site: gradient, wind shadow, lift, sink, turbulence, rotor",
+ "Give a verbal flight plan before each observed flight",
+ "Thorough preflight of glider, harness and reserve",
+ "Demonstrate a hook-in check immediately before every launch",
+ "Confident, committed launches with a clean transition to flying",
+ "Distinguish airspeed from ground speed in flight",
+ "Explain your glider's stall warning signs",
+ "Linked 180° turns and 360s in both directions, smooth reversals",
+ "Controlled approach and spot landing on your feet, no wing strike",
+ "Landings from a planned approach pattern (figure-8 or DBF)",
+ "Pass the USHPA Intermediate (H3) written exam",
+ "Sign the H3 waiver and submit the rating application"
+];
+
+const REBUILD=[
+ ['jh',"Email John Heiney — ask for flying dates, flights per day, glider and site"],
+ ['lmfp',"Email Lookout front office — student record, tow log, H2 sign-off date"],
+ ['booking',"Search Gmail for Lookout booking confirmations — one per day you showed up"],
+ ['exif',"Pull dates from photo and video EXIF on your phone and drives"],
+ ['wetransfer',"Check WeTransfer emails — each one dates a flying day"],
+ ['receipts',"Search Gmail for lesson receipts and card charges"],
+ ['ushpa',"Check USHPA account for membership and rating dates"],
+ ['people',"Ask anyone you drove out with — passengers remember dates"],
+ ['log',"Log every confirmed day, marked reconstructed with its source"],
+ ['observer',"Show the reconstructed log to your observer before you rely on it"]
+];
+
+const BLANK={version:1,flights:[],gliders:[],tasks:{},rebuild:{},rebuildNotes:'',cur:0,steps:{},
+  pilot:{name:'',num:'',rating:'H2',rdate:'',exp:'',skills:'',official:'',waiver:'',ice:'',notes:''}};
+let state=JSON.parse(JSON.stringify(BLANK));
+let editingId=null, tab='log', saveTimer=null;
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+function chip(t,cls){const c=$('savechip');c.textContent=t;c.className='savechip '+(cls||'');}
+
+async function load(){
+  try{
+    const r=await store.get(KEY);
+    if(r&&r.value){const d=JSON.parse(r.value);
+      const p=Object.assign({},BLANK.pilot,d.pilot||{});
+      state=Object.assign(state,d);state.pilot=p;}
+    chip('saved','on');
+  }catch(e){ chip('new log',''); }
+  if(!state.gliders.length){
+    state.gliders=[
+      {id:uid(),name:'California glider',where:'with John Heiney',setup:'',pre:'',down:''},
+      {id:uid(),name:'Lookout glider',where:'Lookout Mountain Flight Park',setup:'',pre:'',down:''}
+    ];
+  }
+  renderAll();
+}
+function save(){
+  chip('saving…','');
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    try{ const r=await store.set(KEY,JSON.stringify(state));
+      chip(r?'saved':'not saved',r?'on':'bad');
+    }catch(e){ chip('not saved','bad'); }
+  },350);
+}
+
+/* ---------- stats ---------- */
+function stats(){
+  const days=new Set(state.flights.map(f=>f.date)).size;
+  const flights=state.flights.length;
+  const soloMin=state.flights.filter(f=>f.solo).reduce((a,f)=>a+(+f.min||0),0);
+  const allMin=state.flights.reduce((a,f)=>a+(+f.min||0),0);
+  return {days,flights,soloHrs:soloMin/60,allHrs:allMin/60};
+}
+const hm=h=>{const t=Math.round(h*60);return Math.floor(t/60)+'h '+String(t%60).padStart(2,'0')+'m';};
+
+/* ---------- render ---------- */
+function renderAll(){renderHeader();renderPilot();renderLog();renderProg();renderGliders();renderRebuild();}
+
+function renderPilot(){
+  const p=state.pilot||{};
+  const v=(x,fb)=>x?`<div class="v">${esc(x)}</div>`:`<div class="v dim">${fb}</div>`;
+  let expTxt='Membership expiry not set',expCls='';
+  if(p.exp){
+    const days=Math.ceil((new Date(p.exp+'T12:00:00')-new Date())/86400000);
+    if(days<0){expTxt='Membership expired '+Math.abs(days)+' days ago';expCls='gone';}
+    else if(days<=60){expTxt='Membership renews in '+days+' days';expCls='soon';}
+    else {expTxt='Membership good for '+days+' more days';}
+  }
+  $('pcardview').innerHTML=`<div class="pcard">
+    <div class="pceyebrow">USHPA Pilot</div>
+    <div class="pcname">${esc(p.name||'Add your card')}</div>
+    <div class="pcgrid">
+      <div class="pcf"><div class="k">Member no.</div>${v(p.num,'—')}</div>
+      <div class="pcf"><div class="k">Rating</div>${v(p.rating,'—')}</div>
+      <div class="pcf"><div class="k">Rating issued</div>${v(p.rdate?fmtShort(p.rdate):'','—')}</div>
+      <div class="pcf"><div class="k">Special skills</div>${v(p.skills,'none yet')}</div>
+      ${p.official?`<div class="pcf" style="grid-column:1/-1"><div class="k">Signed by</div>${v(p.official,'—')}</div>`:''}
+      ${p.ice?`<div class="pcf" style="grid-column:1/-1"><div class="k">Emergency contact</div>${v(p.ice,'—')}</div>`:''}
+      ${p.waiver?`<div class="pcf" style="grid-column:1/-1"><div class="k">Waiver on file</div>${v(p.waiver,'—')}</div>`:''}
+      ${p.notes?`<div class="pcf" style="grid-column:1/-1"><div class="k">Notes</div>${v(p.notes,'—')}</div>`:''}
+    </div>
+    <div class="pcbar"><span class="pcexp ${expCls}">${expTxt}</span>
+      <button class="pcedit" id="pcopen">Edit</button></div>
+  </div>`;
+  $('pcopen').onclick=()=>{
+    ['name','num','rating','rdate','exp','skills','official','waiver','ice','notes']
+      .forEach(k=>$('p-'+k).value=p[k]||'');
+    $('pcedit').classList.remove('hidden');
+    $('pcedit').scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+}
+function fmtShort(d){const q=d.split('-');return q.length===3?`${q[1]}/${q[2]}/${q[0].slice(2)}`:d;}
+
+function renderHeader(){
+  const s=stats();
+  $('hdrstat').textContent=`${s.flights} flights · ${s.days} days · ${hm(s.soloHrs)} solo`;
+}
+
+function renderLog(){
+  const s=stats();
+  $('logsummary').textContent=state.flights.length
+    ? `${s.flights} flights over ${s.days} days · ${hm(s.allHrs)} total airtime`
+    : 'Nothing logged yet.';
+  const gl=$('gliderlist');
+  gl.innerHTML=state.gliders.map(g=>`<option>${esc(g.name)}</option>`).join('');
+
+  const by={};
+  state.flights.forEach(f=>{(by[f.date]=by[f.date]||[]).push(f)});
+  const dates=Object.keys(by).sort().reverse();
+  if(!dates.length){$('loglist').innerHTML='<p class="empty">Your first entry can be a flight from last year.<br>Log it, tick Reconstructed, name the source.</p>';return;}
+  $('loglist').innerHTML=dates.map(d=>{
+    const list=by[d];
+    const mins=list.reduce((a,f)=>a+(+f.min||0),0);
+    return `<div class="daygroup"><div class="dayhead">
+      <span class="daydate">${esc(fmtDate(d))}</span>
+      <span class="daymeta">${list.length} flt · ${mins.toFixed(1)} min</span></div>`+
+      list.map(f=>`<div class="flt" data-id="${f.id}">
+        <span class="fltdur">${(+f.min||0).toFixed(1)}<span style="font-size:9px">m</span></span>
+        <span class="fltmain">
+          <span class="fltsite">${esc(f.site||'—')}</span>
+          <span class="fltsub">${f.est?'<span class="tag est">est</span>':''}${!f.solo?'<span class="tag tan2">tandem</span>':''}${esc([f.glider,f.launch,f.agl?f.agl+' ft':''].filter(Boolean).join(' · '))}${f.witness?' · '+esc(f.witness):''}${f.src?'<br>source: '+esc(f.src):''}${f.notes?'<br>'+esc(f.notes):''}</span>
+        </span>
+        <button class="del" data-del="${f.id}" aria-label="Delete flight">×</button>
+      </div>`).join('')+`</div>`;
+  }).join('');
+}
+function fmtDate(d){
+  const p=d.split('-'); if(p.length!==3) return d;
+  const dt=new Date(+p[0],+p[1]-1,+p[2]);
+  return dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
+
+function renderProg(){
+  const s=stats();
+  const rows=[
+    ['Days',s.days,REQ.days,s.days,REQ.days],
+    ['Flights',s.flights,REQ.flights,s.flights,REQ.flights],
+    ['Solo air',hm(s.soloHrs),REQ.hours+' hrs',s.soloHrs,REQ.hours]
+  ];
+  $('tapes').innerHTML=rows.map(([lab,val,req,cur,max])=>{
+    const pct=Math.min(100,(cur/max)*100), done=cur>=max;
+    return `<div class="tape">
+      <div class="tapenum">${typeof val==='number'?val:val}<span> /${typeof req==='number'?req:' '+req}</span></div>
+      <div class="tapebar"><div class="tapefill ${done?'done':''}" style="height:${pct}%"></div><div class="ticks"></div></div>
+      <div class="tapelab">${lab}</div><div class="tapereq">${pct.toFixed(0)}%</div>
+    </div>`;
+  }).join('');
+  const gaps=[];
+  if(s.days<REQ.days)gaps.push(`${REQ.days-s.days} more flying days`);
+  if(s.flights<REQ.flights)gaps.push(`${REQ.flights-s.flights} more flights`);
+  if(s.soloHrs<REQ.hours)gaps.push(`${hm(REQ.hours-s.soloHrs)} more solo airtime`);
+  $('gatenote').innerHTML=gaps.length
+    ? 'Still needed: <b>'+gaps.join('</b>, <b>')+'</b>. Tandem time is logged here but does not count toward the solo hours.'
+    : 'Logged requirements met. The witnessed tasks and the written exam are what remain.';
+
+  $('tasklist').innerHTML=TASKS.map((t,i)=>{
+    const on=!!state.tasks[i];
+    return `<li class="${on?'done':''}"><input type="checkbox" data-task="${i}" id="tk${i}" ${on?'checked':''}><label for="tk${i}">${esc(t)}</label></li>`;
+  }).join('');
+}
+
+function renderGliders(){
+  $('gtabs').innerHTML=state.gliders.map((g,i)=>
+    `<button class="gtab ${i===state.cur?'on':''}" data-g="${i}">${esc(g.name)}</button>`).join('');
+  const g=state.gliders[state.cur];
+  if(!g){$('gbody').innerHTML='';return;}
+  const block=(title,txt,key)=>{
+    const lines=(txt||'').split('\n').map(l=>l.trim()).filter(Boolean);
+    if(!lines.length) return `<h3>${title}</h3><p class="empty" style="text-align:left;padding:6px 0">Nothing here yet — tap <b>Edit steps</b> and write what you were taught.</p>`;
+    return `<h3>${title}</h3><ul class="steps">`+lines.map((l,i)=>{
+      const k=g.id+'|'+key+'|'+i, on=!!state.steps[k];
+      return `<li class="${on?'done':''}"><input type="checkbox" data-step="${k}" ${on?'checked':''}><span class="stepnum">${String(i+1).padStart(2,'0')}</span><span>${esc(l)}</span></li>`;
+    }).join('')+'</ul>';
+  };
+  $('gbody').innerHTML=`<p class="note" style="margin-bottom:2px">${esc(g.where||'')}</p>`+
+    block('Setup',g.setup,'s')+block('Preflight',g.pre,'p')+block('Takedown',g.down,'d');
+}
+
+function renderRebuild(){
+  $('rebuildlist').innerHTML=REBUILD.map(([k,t])=>{
+    const on=!!state.rebuild[k];
+    return `<li class="${on?'done':''}"><input type="checkbox" data-rb="${k}" id="rb${k}" ${on?'checked':''}><label for="rb${k}">${esc(t)}</label></li>`;
+  }).join('');
+  $('rebuildnotes').value=state.rebuildNotes||'';
+}
+
+/* ---------- events ---------- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  tab=b.dataset.tab;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  ['log','prog','glide','rebuild'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==tab));
+  window.scrollTo(0,0);
+});
+
+$('f-est').onchange=e=>$('srcwrap').classList.toggle('hidden',!e.target.checked);
+
+$('savebtn').onclick=()=>{
+  const date=$('f-date').value;
+  if(!date){$('f-date').focus();chip('date required','bad');return;}
+  const f={
+    id:editingId||uid(), date, min:parseFloat($('f-min').value)||0,
+    site:$('f-site').value.trim(), glider:$('f-glider').value.trim(),
+    launch:$('f-launch').value, agl:$('f-agl').value.trim(),
+    witness:$('f-witness').value.trim(), solo:$('f-solo').checked,
+    est:$('f-est').checked, src:$('f-src').value.trim(), notes:$('f-notes').value.trim()
+  };
+  if(editingId){ state.flights=state.flights.map(x=>x.id===editingId?f:x); }
+  else state.flights.push(f);
+  const keepSite=f.site, keepGlider=f.glider, keepDate=f.date;
+  resetForm();
+  $('f-site').value=keepSite; $('f-glider').value=keepGlider; $('f-date').value=keepDate;
+  save(); renderHeader(); renderLog(); renderProg();
+};
+
+function resetForm(){
+  editingId=null;
+  ['f-min','f-site','f-glider','f-agl','f-witness','f-src','f-notes'].forEach(i=>$(i).value='');
+  $('f-solo').checked=true; $('f-est').checked=false;
+  $('srcwrap').classList.add('hidden'); $('cancelrow').classList.add('hidden');
+  $('formtitle').textContent='Add a flight'; $('savebtn').textContent='Log it';
+  $('formnote').innerHTML='Backfilling an old flight? Tick <b>Reconstructed</b> and say where the date came from.';
+}
+$('cancelbtn').onclick=()=>{resetForm();$('f-date').value=new Date().toISOString().slice(0,10);};
+
+$('loglist').onclick=e=>{
+  const d=e.target.closest('[data-del]');
+  if(d){ if(confirm('Delete this flight?')){ state.flights=state.flights.filter(x=>x.id!==d.dataset.del);
+    if(editingId===d.dataset.del)resetForm(); save();renderHeader();renderLog();renderProg(); } return; }
+  const row=e.target.closest('.flt'); if(!row)return;
+  const f=state.flights.find(x=>x.id===row.dataset.id); if(!f)return;
+  editingId=f.id;
+  $('f-date').value=f.date; $('f-min').value=f.min||''; $('f-site').value=f.site||'';
+  $('f-glider').value=f.glider||''; $('f-launch').value=f.launch||'Foot — training hill';
+  $('f-agl').value=f.agl||''; $('f-witness').value=f.witness||''; $('f-solo').checked=!!f.solo;
+  $('f-est').checked=!!f.est; $('f-src').value=f.src||''; $('f-notes').value=f.notes||'';
+  $('srcwrap').classList.toggle('hidden',!f.est);
+  $('formtitle').textContent='Edit flight'; $('savebtn').textContent='Save changes';
+  $('formnote').textContent='Editing an existing entry.';
+  $('cancelrow').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+
+['name','num','rating','rdate','exp','skills','official','waiver','ice','notes'].forEach(k=>{
+  $('p-'+k).oninput=e=>{state.pilot[k]=e.target.value;save();};
+});
+$('pcdone').onclick=()=>{$('pcedit').classList.add('hidden');renderPilot();};
+
+$('tasklist').onchange=e=>{const i=e.target.dataset.task;if(i==null)return;
+  state.tasks[i]=e.target.checked;save();renderProg();};
+$('rebuildlist').onchange=e=>{const i=e.target.dataset.rb;if(i==null)return;
+  state.rebuild[i]=e.target.checked;save();renderRebuild();};
+$('rebuildnotes').oninput=e=>{state.rebuildNotes=e.target.value;save();};
+
+$('gtabs').onclick=e=>{const b=e.target.closest('[data-g]');if(!b)return;
+  state.cur=+b.dataset.g;$('editbox').classList.add('hidden');save();renderGliders();};
+$('gbody').onchange=e=>{const k=e.target.dataset.step;if(!k)return;
+  state.steps[k]=e.target.checked;save();renderGliders();};
+$('uncheckall').onclick=()=>{const g=state.gliders[state.cur];if(!g)return;
+  Object.keys(state.steps).forEach(k=>{if(k.startsWith(g.id+'|'))delete state.steps[k]});save();renderGliders();};
+$('addglider').onclick=()=>{
+  state.gliders.push({id:uid(),name:'New glider',where:'',setup:'',pre:'',down:''});
+  state.cur=state.gliders.length-1;save();renderGliders();openEdit();};
+$('editsteps').onclick=openEdit;
+function openEdit(){
+  const g=state.gliders[state.cur];if(!g)return;
+  $('e-name').value=g.name;$('e-where').value=g.where||'';
+  $('e-setup').value=g.setup||'';$('e-pre').value=g.pre||'';$('e-down').value=g.down||'';
+  $('editbox').classList.remove('hidden');
+  $('editbox').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('esave').onclick=()=>{
+  const g=state.gliders[state.cur];if(!g)return;
+  g.name=$('e-name').value.trim()||'Unnamed';g.where=$('e-where').value.trim();
+  g.setup=$('e-setup').value;g.pre=$('e-pre').value;g.down=$('e-down').value;
+  $('editbox').classList.add('hidden');save();renderGliders();renderLog();};
+$('eclose').onclick=()=>$('editbox').classList.add('hidden');
+$('edel').onclick=()=>{if(!confirm('Delete this glider and its checklists?'))return;
+  state.gliders.splice(state.cur,1);state.cur=0;$('editbox').classList.add('hidden');save();renderGliders();};
+
+/* ---------- data io ---------- */
+$('databtn').onclick=()=>$('datapanel').classList.toggle('hidden');
+function showIO(label,text,restore){
+  $('iobox').classList.remove('hidden');$('iolabel').textContent=label;
+  $('ioarea').value=text;$('iodo').classList.toggle('hidden',!restore);
+  if(!restore){$('ioarea').select();}
+}
+$('ioclose').onclick=()=>$('iobox').classList.add('hidden');
+$('expjson').onclick=()=>showIO('Copy and keep this somewhere safe',JSON.stringify(state),false);
+$('expcsv').onclick=()=>{
+  const head=['Date','Site','Glider','Launch','Minutes','Solo','MaxAGL','Reconstructed','Source','Witness','Notes'];
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const rows=state.flights.slice().sort((a,b)=>a.date<b.date?-1:1)
+    .map(f=>[f.date,f.site,f.glider,f.launch,f.min,f.solo?'solo':'tandem',f.agl,f.est?'yes':'',f.src,f.witness,f.notes].map(q).join(','));
+  showIO('Paste into Sheets or Excel',[head.map(q).join(',')].concat(rows).join('\n'),false);
+};
+$('impbtn').onclick=()=>showIO('Paste a previous JSON export, then Restore','',true);
+$('iodo').onclick=()=>{
+  try{ const d=JSON.parse($('ioarea').value);
+    if(!d||!Array.isArray(d.flights))throw 0;
+    state=Object.assign(JSON.parse(JSON.stringify(BLANK)),d);
+    state.pilot=Object.assign({},BLANK.pilot,d.pilot||{});
+    $('iobox').classList.add('hidden');save();renderAll();chip('restored','on');
+  }catch(e){ chip("that isn't a valid export",'bad'); }
+};
+
+try{$('storewhere').textContent=store.where;}catch(e){}
+$('f-date').value=new Date().toISOString().slice(0,10);
+load();
+</script>

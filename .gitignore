@@ -1,0 +1,12 @@
+# This repository is PUBLIC.
+# Log exports contain the USHPA number, emergency contact, and every flight.
+# Keep them out of version control.
+*.json
+*.csv
+backups/
+exports/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+.vscode/
