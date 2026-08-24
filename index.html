@@ -146,6 +146,22 @@
     text-transform:uppercase;cursor:pointer}
   #firstrun{border-left:3px solid var(--blue);background:#EDF3F8;padding:10px 12px;margin:0 0 12px;
     font-size:12.5px;color:#204A6B;border-radius:2px;line-height:1.55}
+
+  /* ---------- ephemeral-storage warning + backup nudge ---------- */
+  #ephwarn{background:#5B3A00;color:#FFF2DC;border-radius:3px;padding:12px 13px;margin:0 0 12px;font-size:13px;line-height:1.55}
+  #ephwarn b{display:block;font-family:var(--disp);text-transform:uppercase;font-size:17px;letter-spacing:.04em;margin-bottom:5px;font-weight:600}
+  #ephwarn .btnrow{margin-top:10px}
+  #ephwarn button{background:#FFF2DC;color:#5B3A00;border:none;border-radius:2px;padding:8px 12px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;cursor:pointer}
+  #ephwarn button.sec{background:none;color:#FFF2DC;border:1px solid rgba(255,242,220,.45)}
+  #restoreoffer{background:#0F3D2E;color:#DFF3EA;border-radius:3px;padding:12px 13px;margin:0 0 12px;font-size:13px;line-height:1.55}
+  #restoreoffer b{display:block;font-family:var(--disp);text-transform:uppercase;font-size:17px;letter-spacing:.04em;margin-bottom:5px;font-weight:600}
+  #restoreoffer button{margin-top:9px;margin-right:7px;background:#DFF3EA;color:#0F3D2E;border:none;border-radius:2px;
+    padding:8px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;cursor:pointer}
+  #restoreoffer button.sec{background:none;color:#DFF3EA;border:1px solid rgba(223,243,234,.45)}
+  .bkchip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+  .bkchip.warn{color:var(--tan)}
+  .bkchip.bad{color:var(--mag);font-weight:600}
   #firstrun button{margin-top:8px;background:none;border:1px solid #9FBDD4;border-radius:2px;
     padding:6px 10px;font-family:var(--mono);font-size:10px;letter-spacing:.07em;
     text-transform:uppercase;color:#204A6B;cursor:pointer}
@@ -155,7 +171,7 @@
   @media print{
     @page{margin:14mm 12mm}
     body{background:#fff;color:#000}
-    .wrap,nav,#storagewarn,#firstrun{display:none!important}
+    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer{display:none!important}
     #printdoc{display:block!important}
     .pr-head{border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:11pt}
     .pr-title{font-family:var(--disp);text-transform:uppercase;font-size:23pt;letter-spacing:.02em;line-height:1}
@@ -188,11 +204,14 @@
     <div class="sub">
       <span id="hdrstat">—</span>
       <span class="savechip" id="savechip">loading</span>
+      <span class="bkchip" id="bkchip"></span>
       <button class="linkbtn" id="databtn">data</button>
     </div>
   </header>
 
   <div id="storagewarn" class="hidden"></div>
+  <div id="restoreoffer" class="hidden"></div>
+  <div id="ephwarn" class="hidden"></div>
   <div id="firstrun" class="hidden"></div>
 
   <!-- DATA PANEL -->
@@ -203,6 +222,7 @@
       <button class="ghost" id="expcsv">Flights CSV</button>
       <button class="ghost" id="expall">Everything CSV</button>
       <button class="ghost" id="expjson">Backup JSON</button>
+      <button class="ghost" id="explink">Backup link</button>
       <button class="ghost" id="printbtn">Print / PDF</button>
       <button class="ghost" id="impbtn">Restore from JSON</button>
     </div>
@@ -481,9 +501,17 @@ async function load(){
     ];
     if(storageOK) save();
   }
+  let persistent=false;
   if(navigator.storage && navigator.storage.persist){
-    try{ const p=await navigator.storage.persisted(); if(!p) await navigator.storage.persist(); }catch(e){}
+    try{
+      persistent=await navigator.storage.persisted();
+      if(!persistent && navigator.storage.persist) persistent=await navigator.storage.persist();
+    }catch(e){}
   }
+  let acked=false; try{ acked=sessionStorage.getItem('hg-eph-ack')==='1'; }catch(e){}
+  const restored=await offerHashRestore();
+  if(storageOK && !persistent && !acked && !restored) showEphemeralWarning();
+  renderBackupChip();
   if(found){ lastSaved=new Date(); }
   renderSaveState();
   renderAll();
@@ -547,7 +575,8 @@ function renderSaveState(){
 }
 
 function save(){
-  pending=true; renderSaveState();
+  state.changesSinceExport=(state.changesSinceExport||0)+1;
+  pending=true; renderSaveState(); renderBackupChip();
   clearTimeout(saveTimer);
   saveTimer=setTimeout(doSave,300);
 }
@@ -912,8 +941,108 @@ function everythingCSV(){
 
 $('expcsv').onclick =()=>deliver('flight-log-'+stamp()+'.csv',flightsCSV(),'text/csv','Flights CSV');
 $('expall').onclick =()=>deliver('logbook-full-'+stamp()+'.csv',everythingCSV(),'text/csv','Everything CSV');
-$('expjson').onclick=()=>deliver('logbook-backup-'+stamp()+'.json',JSON.stringify(state,null,2),'application/json','Backup JSON');
+$('expjson').onclick=()=>{deliver('logbook-backup-'+stamp()+'.json',JSON.stringify(state,null,2),'application/json','Backup JSON');markExported();};
+$('explink').onclick=makeBackupLink;
 $('impbtn').onclick =()=>showIO('Paste a previous JSON export, then Restore','',true);
+
+/* ---------- ephemeral storage ----------
+   Private Browsing accepts every write and discards the lot when the session
+   ends. Nothing throws, so a write-probe can't see it coming. The only honest
+   signal is navigator.storage.persisted(): false means the browser reserves
+   the right to bin your data without warning. We say so, loudly, and give a
+   way out that doesn't depend on the browser at all. */
+
+function b64url(u8){ let s=''; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function unb64url(t){ t=t.replace(/-/g,'+').replace(/_/g,'/');
+  const bin=atob(t), u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+
+async function packState(){
+  const bytes=new TextEncoder().encode(JSON.stringify(state));
+  if(typeof CompressionStream!=='undefined'){
+    try{
+      const st=new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+      return 'g'+b64url(new Uint8Array(await new Response(st).arrayBuffer()));
+    }catch(e){}
+  }
+  return 'r'+b64url(bytes);
+}
+async function unpackState(t){
+  const kind=t.charAt(0), data=unb64url(t.slice(1));
+  if(kind==='g'){
+    const st=new Blob([data]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new TextDecoder().decode(new Uint8Array(await new Response(st).arrayBuffer()));
+  }
+  return new TextDecoder().decode(data);
+}
+
+function unbacked(){ return state.changesSinceExport||0; }
+function markExported(){ state.changesSinceExport=0; state.lastExport=new Date().toISOString();
+  save(); renderBackupChip(); $('ephwarn').classList.add('hidden'); }
+
+function renderBackupChip(){
+  const el=$('bkchip'), n=unbacked();
+  if(!n){ el.textContent=state.lastExport?'backed up':'no backup yet'; el.className='bkchip'; return; }
+  el.textContent=n+' unbacked change'+(n===1?'':'s');
+  el.className='bkchip '+(n>=8?'bad':'warn');
+}
+
+function showEphemeralWarning(){
+  const el=$('ephwarn');
+  el.innerHTML='<b>This browser may erase your log</b>'+
+    'Storage here is not persistent. In a <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">Private tab</b> '+
+    'everything you enter is deleted when the session ends \u2014 no error, no warning, it simply is not there next time.<br>'+
+    'Either use a normal tab for this site, or take a backup link before you close it. A backup link holds your whole log inside the URL, '+
+    'so you can email it to yourself and open it later to restore.'+
+    '<div class="btnrow"><button id="ephlink">Backup link</button>'+
+    '<button class="sec" id="ephdismiss">I understand</button></div>';
+  el.classList.remove('hidden');
+  $('ephlink').onclick=()=>{ $('datapanel').classList.remove('hidden'); makeBackupLink(); };
+  $('ephdismiss').onclick=()=>{
+    el.classList.add('hidden');
+    try{ sessionStorage.setItem('hg-eph-ack','1'); }catch(e){}
+  };
+}
+
+async function makeBackupLink(){
+  try{
+    const url=location.origin+location.pathname+'#d='+await packState();
+    showIO('Email this link to yourself \u2014 it contains your whole log',url,false);
+    markExported();
+    chip('backup link ready','on');
+  }catch(e){ chip('could not build link','bad'); }
+}
+
+async function offerHashRestore(){
+  const h=location.hash||'';
+  if(h.indexOf('#d=')!==0) return false;
+  let incoming;
+  try{ incoming=JSON.parse(await unpackState(h.slice(3))); }
+  catch(e){ chip('backup link is unreadable','bad'); return false; }
+  if(!incoming||!Array.isArray(incoming.flights)) return false;
+
+  const el=$('restoreoffer');
+  const n=incoming.flights.length;
+  const days=new Set(incoming.flights.map(f=>f.date)).size;
+  const here=state.flights.length;
+  el.innerHTML='<b>Backup link opened</b>This link holds <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">'+
+    n+' flight'+(n===1?'':'s')+' over '+days+' day'+(days===1?'':'s')+'</b>. '+
+    (here? 'This browser already has '+here+' flight'+(here===1?'':'s')+' logged \u2014 restoring replaces them.'
+         : 'Nothing is logged in this browser yet.')+
+    '<br><button id="dorestore">Restore it</button><button class="sec" id="skiprestore">Leave it alone</button>';
+  el.classList.remove('hidden');
+  $('dorestore').onclick=()=>{
+    state=Object.assign(JSON.parse(JSON.stringify(BLANK)),incoming);
+    state.pilot=Object.assign({},BLANK.pilot,incoming.pilot||{});
+    el.classList.add('hidden');
+    history.replaceState(null,'',location.pathname);
+    save(); renderAll(); chip('restored from link','on');
+  };
+  $('skiprestore').onclick=()=>{ el.classList.add('hidden');
+    history.replaceState(null,'',location.pathname); };
+  return true;
+}
 
 /* ---------- print view ---------- */
 function buildPrint(){
