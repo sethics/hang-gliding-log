@@ -136,12 +136,26 @@
   .hidden{display:none!important}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
+  /* ---------- storage health banner ---------- */
+  #storagewarn{background:#7A1230;color:#FFEDF3;border-radius:3px;padding:12px 13px;margin:0 0 12px;
+    font-size:13px;line-height:1.5}
+  #storagewarn b{display:block;font-family:var(--disp);text-transform:uppercase;font-size:17px;
+    letter-spacing:.04em;margin-bottom:5px;font-weight:600}
+  #storagewarn button{margin-top:9px;background:#FFEDF3;color:#7A1230;border:none;border-radius:2px;
+    padding:8px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.07em;
+    text-transform:uppercase;cursor:pointer}
+  #firstrun{border-left:3px solid var(--blue);background:#EDF3F8;padding:10px 12px;margin:0 0 12px;
+    font-size:12.5px;color:#204A6B;border-radius:2px;line-height:1.55}
+  #firstrun button{margin-top:8px;background:none;border:1px solid #9FBDD4;border-radius:2px;
+    padding:6px 10px;font-family:var(--mono);font-size:10px;letter-spacing:.07em;
+    text-transform:uppercase;color:#204A6B;cursor:pointer}
+
   /* ---------- print / PDF ---------- */
   #printdoc{display:none}
   @media print{
     @page{margin:14mm 12mm}
     body{background:#fff;color:#000}
-    .wrap,nav{display:none!important}
+    .wrap,nav,#storagewarn,#firstrun{display:none!important}
     #printdoc{display:block!important}
     .pr-head{border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:11pt}
     .pr-title{font-family:var(--disp);text-transform:uppercase;font-size:23pt;letter-spacing:.02em;line-height:1}
@@ -177,6 +191,9 @@
       <button class="linkbtn" id="databtn">data</button>
     </div>
   </header>
+
+  <div id="storagewarn" class="hidden"></div>
+  <div id="firstrun" class="hidden"></div>
 
   <!-- DATA PANEL -->
   <div class="card hidden" id="datapanel">
@@ -438,30 +455,130 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function chip(t,cls){const c=$('savechip');c.textContent=t;c.className='savechip '+(cls||'');}
 
 async function load(){
+  const probe=probeStorage();
+  storageOK=probe.ok; storageErr=probe.err||'';
+
+  let found=false;
   try{
     const r=await store.get(KEY);
-    if(r&&r.value){const d=JSON.parse(r.value);
+    if(r&&r.value){
+      const d=JSON.parse(r.value);
       const p=Object.assign({},BLANK.pilot,d.pilot||{});
-      state=Object.assign(state,d);state.pilot=p;}
-    chip('saved','on');
-  }catch(e){ chip('new log',''); }
+      state=Object.assign(state,d); state.pilot=p; found=true;
+      /* keep one generation back, so a bad Restore is survivable */
+      try{ if(typeof window.storage==='undefined'||!window.storage)
+             localStorage.setItem(KEY+'.prev',r.value); }catch(e){}
+    }
+  }catch(e){ found=false; }
+
+  if(!storageOK) showStorageWarning(storageErr);
+  else if(!found && !state.dismissedFirstRun) maybeFirstRunNote();
+
   if(!state.gliders.length){
     state.gliders=[
       Object.assign({},PRESETS[0],{id:uid(),name:'Falcon 170'}),
       {id:uid(),name:'California glider',where:'with John Heiney',setup:'',pre:'',down:''}
     ];
+    if(storageOK) save();
   }
+  if(navigator.storage && navigator.storage.persist){
+    try{ const p=await navigator.storage.persisted(); if(!p) await navigator.storage.persist(); }catch(e){}
+  }
+  if(found){ lastSaved=new Date(); }
+  renderSaveState();
   renderAll();
 }
-function save(){
-  chip('saving…','');
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(async()=>{
-    try{ const r=await store.set(KEY,JSON.stringify(state));
-      chip(r?'saved':'not saved',r?'on':'bad');
-    }catch(e){ chip('not saved','bad'); }
-  },350);
+
+/* ---------- persistence ----------
+   Three failure modes this guards against, all of which have bitten:
+   1. a debounced write dying when the phone backgrounds the page
+   2. storage being blocked (private browsing, site-data restrictions)
+      and the app carrying on as if nothing were wrong
+   3. iOS keeping home-screen-app storage separate from Safari's, so the
+      same URL shows an empty log depending on how you opened it        */
+
+let pending=false, lastSaved=null, storageOK=true, storageErr='';
+
+function probeStorage(){
+  if(typeof window.storage!=='undefined'&&window.storage) return {ok:true,mode:'Claude'};
+  try{
+    const k='__hg_probe__';
+    localStorage.setItem(k,'1');
+    const ok=localStorage.getItem(k)==='1';
+    localStorage.removeItem(k);
+    return {ok:ok,mode:'browser',err:ok?'':'write did not read back'};
+  }catch(e){ return {ok:false,mode:'browser',err:e.name||'blocked'}; }
 }
+
+function isStandalone(){
+  return navigator.standalone===true ||
+    !!(window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+}
+
+function showStorageWarning(err){
+  const el=$('storagewarn');
+  el.innerHTML='<b>Nothing is being saved</b>This browser is refusing to store data'+
+    (err?' ('+esc(err)+')':'')+'. Private browsing and strict site-data settings both do this. '+
+    'Anything you type here will vanish when you close the tab.<br>'+
+    'Open this page in a normal window, or export your data now and restore it somewhere that works.'+
+    '<button id="warnexport">Show my data</button>';
+  el.classList.remove('hidden');
+  $('warnexport').onclick=()=>{
+    $('datapanel').classList.remove('hidden');
+    showIO('Copy this somewhere safe right now',JSON.stringify(state,null,2),false);
+  };
+}
+
+function maybeFirstRunNote(){
+  const el=$('firstrun');
+  if(!isStandalone()) return;
+  el.innerHTML='Opened from your home screen. On iOS a home-screen app keeps its storage '+
+    '<b>separate from Safari</b> \u2014 same address, different data. If you entered flights in Safari '+
+    'and they look missing here, open the site in Safari, use Data \u2192 Backup JSON, then Restore it here. '+
+    'Pick one and stick to it.<button id="frdismiss">Got it</button>';
+  el.classList.remove('hidden');
+  $('frdismiss').onclick=()=>{ el.classList.add('hidden'); state.dismissedFirstRun=true; save(); };
+}
+
+function renderSaveState(){
+  if(!storageOK){ chip('NOT SAVED','bad'); return; }
+  if(pending){ chip('saving\u2026',''); return; }
+  chip(lastSaved?'saved '+lastSaved.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):'saved','on');
+}
+
+function save(){
+  pending=true; renderSaveState();
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(doSave,300);
+}
+async function doSave(){
+  clearTimeout(saveTimer);
+  if(!pending) return;
+  try{
+    const r=await store.set(KEY,JSON.stringify(state));
+    if(!r) throw new Error('storage returned nothing');
+    pending=false; lastSaved=new Date();
+    if(!storageOK){ storageOK=true; $('storagewarn').classList.add('hidden'); }
+    renderSaveState();
+  }catch(e){
+    storageOK=false; storageErr=e.name||'error';
+    renderSaveState(); showStorageWarning(storageErr);
+  }
+}
+/* Synchronous last-chance write. pagehide and visibilitychange are the only
+   events iOS reliably fires before it suspends a page. */
+function flushSync(){
+  if(!pending) return;
+  clearTimeout(saveTimer);
+  try{
+    if(typeof window.storage!=='undefined'&&window.storage) window.storage.set(KEY,JSON.stringify(state));
+    else localStorage.setItem(KEY,JSON.stringify(state));
+    pending=false; lastSaved=new Date();
+  }catch(e){ storageOK=false; }
+}
+window.addEventListener('pagehide',flushSync);
+window.addEventListener('beforeunload',flushSync);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSync(); });
 
 /* ---------- stats ---------- */
 function stats(){
