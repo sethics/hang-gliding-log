@@ -162,6 +162,23 @@
   .bkchip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
   .bkchip.warn{color:var(--tan)}
   .bkchip.bad{color:var(--mag);font-weight:600}
+
+  /* ---------- sync ---------- */
+  .syncchip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+  .syncchip.ok{color:var(--good)}
+  .syncchip.pend{color:var(--tan)}
+  .syncchip.off{color:var(--ink3)}
+  .syncchip.err{color:var(--mag);font-weight:600}
+  #synccard{border:1px solid var(--line);border-radius:3px;padding:13px;margin:0 0 14px;background:#F4F8FA}
+  #synccard h3{margin-top:0}
+  #conflict{background:#5B3A00;color:#FFF2DC;border-radius:3px;padding:12px 13px;margin:0 0 12px;font-size:13px;line-height:1.55}
+  #conflict b{display:block;font-family:var(--disp);text-transform:uppercase;font-size:17px;letter-spacing:.04em;margin-bottom:5px;font-weight:600}
+  #conflict button{margin:9px 7px 0 0;background:#FFF2DC;color:#5B3A00;border:none;border-radius:2px;padding:8px 12px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;cursor:pointer}
+  #conflict button.sec{background:none;color:#FFF2DC;border:1px solid rgba(255,242,220,.45)}
+  .syncmsg{font-family:var(--mono);font-size:11.5px;margin-top:9px;line-height:1.5}
+  .syncmsg.bad{color:var(--mag)}
+  .syncmsg.good{color:var(--good)}
   #firstrun button{margin-top:8px;background:none;border:1px solid #9FBDD4;border-radius:2px;
     padding:6px 10px;font-family:var(--mono);font-size:10px;letter-spacing:.07em;
     text-transform:uppercase;color:#204A6B;cursor:pointer}
@@ -171,7 +188,7 @@
   @media print{
     @page{margin:14mm 12mm}
     body{background:#fff;color:#000}
-    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer{display:none!important}
+    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer,#conflict{display:none!important}
     #printdoc{display:block!important}
     .pr-head{border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:11pt}
     .pr-title{font-family:var(--disp);text-transform:uppercase;font-size:23pt;letter-spacing:.02em;line-height:1}
@@ -205,18 +222,41 @@
       <span id="hdrstat">—</span>
       <span class="savechip" id="savechip">loading</span>
       <span class="bkchip" id="bkchip"></span>
+      <span class="syncchip" id="syncchip"></span>
       <button class="linkbtn" id="databtn">data</button>
     </div>
   </header>
 
   <div id="storagewarn" class="hidden"></div>
   <div id="restoreoffer" class="hidden"></div>
+  <div id="conflict" class="hidden"></div>
   <div id="ephwarn" class="hidden"></div>
   <div id="firstrun" class="hidden"></div>
 
   <!-- DATA PANEL -->
   <div class="card hidden" id="datapanel">
     <h2>Your data</h2>
+    <div id="synccard">
+      <h3 style="margin-bottom:6px">Remote sync</h3>
+      <p class="note" id="syncwho" style="margin-bottom:10px"></p>
+      <div id="signedout">
+        <div class="row">
+          <div><label for="s-email">Email</label><input type="email" id="s-email" autocomplete="username"></div>
+          <div><label for="s-pass">Password</label><input type="password" id="s-pass" autocomplete="current-password"></div>
+        </div>
+        <div class="btnrow">
+          <button class="ghost" id="s-signin">Sign in</button>
+          <button class="ghost" id="s-signup">Create account</button>
+        </div>
+      </div>
+      <div id="signedin" class="hidden">
+        <div class="btnrow">
+          <button class="ghost" id="s-push">Sync now</button>
+          <button class="ghost" id="s-signout">Sign out</button>
+        </div>
+      </div>
+      <div class="syncmsg" id="syncmsg"></div>
+    </div>
     <p class="note">Saved automatically to <span id="storewhere">this browser</span>. Export a copy anyway — a rating application is worth backing up.</p>
     <div class="btnrow">
       <button class="ghost" id="expcsv">Flights CSV</button>
@@ -515,6 +555,13 @@ async function load(){
   if(found){ lastSaved=new Date(); }
   renderSaveState();
   renderAll();
+
+  loadSession(); renderSyncCard();
+  if(session){
+    setSyncStatus('pending','Checking the server\u2026','');
+    try{ await reconcile(); }catch(e){ setSyncStatus('error','Could not reach the server.','bad'); }
+    if(syncStatus==='synced'){ $('ephwarn').classList.add('hidden'); }
+  } else { setSyncStatus('signedout'); }
 }
 
 /* ---------- persistence ----------
@@ -574,9 +621,12 @@ function renderSaveState(){
   chip(lastSaved?'saved '+lastSaved.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}):'saved','on');
 }
 
+function saveLocalOnly(){
+  pending=true; clearTimeout(saveTimer); doSave();
+}
 function save(){
   state.changesSinceExport=(state.changesSinceExport||0)+1;
-  pending=true; renderSaveState(); renderBackupChip();
+  pending=true; renderSaveState(); renderBackupChip(); queuePush();
   clearTimeout(saveTimer);
   saveTimer=setTimeout(doSave,300);
 }
@@ -1043,6 +1093,191 @@ async function offerHashRestore(){
     history.replaceState(null,'',location.pathname); };
   return true;
 }
+
+/* ---------- remote sync ----------
+   Local-first. Every change lands in localStorage immediately, then pushes to
+   Supabase. Flying sites have no signal, so the network is never in the path
+   of logging a flight - failures queue and retry.
+
+   The publishable key below is public by design. It maps requests to the
+   low-privilege anon role; the logbook table revokes anon entirely and its RLS
+   policies scope every row to auth.uid(). The key alone reaches nothing.     */
+
+const SUPA_URL='https://ithazcmlkxccmljkkwgr.supabase.co';
+const SUPA_KEY='sb_publishable_1mgW7LyoPT3An5S-LuKARw_sA_wkMBX';
+const SESS_KEY='hg-session-v1';
+const META_KEY='hg-syncmeta-v1';
+
+let session=null;            // {access_token, refresh_token, expires_at, user_id, email}
+let meta={syncedAt:null, dirty:false};
+let syncStatus='signedout';  // signedout | synced | pending | offline | error
+let pushTimer=null, remoteBusy=false;
+
+function lsGet(k){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+function loadSession(){ session=lsGet(SESS_KEY); meta=lsGet(META_KEY)||{syncedAt:null,dirty:false}; }
+function storeSession(){ if(session) lsSet(SESS_KEY,session); else { try{localStorage.removeItem(SESS_KEY);}catch(e){} } }
+function storeMeta(){ lsSet(META_KEY,meta); }
+
+function setSyncStatus(s,msg,cls){
+  syncStatus=s; renderSyncChip();
+  if(msg!==undefined){ const el=$('syncmsg'); el.textContent=msg||''; el.className='syncmsg '+(cls||''); }
+}
+function renderSyncChip(){
+  const el=$('syncchip');
+  const map={signedout:['not synced','off'],synced:['synced','ok'],pending:['sync pending','pend'],
+             offline:['offline','off'],error:['sync failed','err']};
+  const [t,c]=map[syncStatus]||['','off'];
+  el.textContent=t; el.className='syncchip '+c;
+}
+function renderSyncCard(){
+  const inn=!!(session&&session.user_id);
+  $('signedin').classList.toggle('hidden',!inn);
+  $('signedout').classList.toggle('hidden',inn);
+  $('syncwho').textContent=inn
+    ? 'Signed in as '+session.email+'. Your log lives on the server, so a wiped browser costs you nothing.'
+    : 'Sign in and your log is stored remotely. Private browsing stops mattering.';
+  renderSyncChip();
+}
+
+/* ---- auth ---- */
+async function authFetch(path,body,extraHeaders){
+  return fetch(SUPA_URL+path,{method:'POST',
+    headers:Object.assign({'apikey':SUPA_KEY,'Content-Type':'application/json'},extraHeaders||{}),
+    body:JSON.stringify(body)});
+}
+function adoptToken(d){
+  if(!d||!d.access_token) return false;
+  session={access_token:d.access_token, refresh_token:d.refresh_token,
+    expires_at:d.expires_at||Math.floor(Date.now()/1000)+(d.expires_in||3600),
+    user_id:(d.user&&d.user.id)||(session&&session.user_id), email:(d.user&&d.user.email)||(session&&session.email)};
+  storeSession(); return true;
+}
+async function ensureToken(){
+  if(!session) return false;
+  if(session.expires_at && (Date.now()/1000) < session.expires_at-60) return true;
+  try{
+    const r=await authFetch('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token});
+    if(!r.ok){ session=null; storeSession(); renderSyncCard(); return false; }
+    return adoptToken(await r.json());
+  }catch(e){ return false; }
+}
+async function signIn(){
+  const email=$('s-email').value.trim(), pass=$('s-pass').value;
+  if(!email||!pass){ setSyncStatus(syncStatus,'Email and password required.','bad'); return; }
+  setSyncStatus(syncStatus,'Signing in\u2026','');
+  try{
+    const r=await authFetch('/auth/v1/token?grant_type=password',{email:email,password:pass});
+    const d=await r.json();
+    if(!r.ok){ setSyncStatus('error',d.error_description||d.msg||'Sign in failed.','bad'); return; }
+    adoptToken(d); $('s-pass').value='';
+    renderSyncCard(); setSyncStatus('pending','Signed in. Reconciling\u2026','');
+    await reconcile();
+  }catch(e){ setSyncStatus('offline','No connection. Your log is still saved on this device.','bad'); }
+}
+async function signUp(){
+  const email=$('s-email').value.trim(), pass=$('s-pass').value;
+  if(!email||pass.length<8){ setSyncStatus(syncStatus,'Email, and a password of at least 8 characters.','bad'); return; }
+  setSyncStatus(syncStatus,'Creating account\u2026','');
+  try{
+    const r=await authFetch('/auth/v1/signup',{email:email,password:pass});
+    const d=await r.json();
+    if(!r.ok){ setSyncStatus('error',d.error_description||d.msg||'Sign up failed.','bad'); return; }
+    if(d.access_token){ adoptToken(d); $('s-pass').value=''; renderSyncCard(); await reconcile(); }
+    else setSyncStatus(syncStatus,'Account created. Confirm the link in your email, then sign in.','good');
+  }catch(e){ setSyncStatus('offline','No connection.','bad'); }
+}
+function signOut(){
+  session=null; meta={syncedAt:null,dirty:false}; storeSession(); storeMeta();
+  renderSyncCard(); setSyncStatus('signedout','Signed out. This device keeps its own copy.','');
+}
+
+/* ---- data ---- */
+async function pullRemote(){
+  if(!await ensureToken()) return null;
+  const r=await fetch(SUPA_URL+'/rest/v1/logbook?select=data,updated_at&user_id=eq.'+session.user_id,
+    {headers:{apikey:SUPA_KEY,'Authorization':'Bearer '+session.access_token}});
+  if(!r.ok) throw new Error('pull '+r.status);
+  const rows=await r.json();
+  return rows.length?rows[0]:null;
+}
+async function pushRemote(){
+  if(!await ensureToken()) return false;
+  const r=await fetch(SUPA_URL+'/rest/v1/logbook',{method:'POST',
+    headers:{apikey:SUPA_KEY,'Authorization':'Bearer '+session.access_token,
+      'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=representation'},
+    body:JSON.stringify({user_id:session.user_id,data:state})});
+  if(!r.ok) throw new Error('push '+r.status);
+  const rows=await r.json();
+  meta.syncedAt=(rows[0]&&rows[0].updated_at)||new Date().toISOString();
+  meta.dirty=false; storeMeta();
+  return true;
+}
+function queuePush(){
+  if(!session) return;
+  meta.dirty=true; storeMeta(); setSyncStatus('pending');
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(runPush,1200);
+}
+async function runPush(){
+  if(!session||!meta.dirty||remoteBusy) return;
+  if(!navigator.onLine){ setSyncStatus('offline','Offline. Queued \u2014 will send when you reconnect.',''); return; }
+  remoteBusy=true;
+  try{ await pushRemote(); setSyncStatus('synced','Synced '+new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})+'.','good'); }
+  catch(e){ setSyncStatus('error','Could not reach the server. Still saved on this device; will retry.','bad'); }
+  finally{ remoteBusy=false; }
+}
+
+/* Reconcile local against remote. Never silently discards either side. */
+async function reconcile(){
+  if(!session) return;
+  let remote;
+  try{ remote=await pullRemote(); }
+  catch(e){ setSyncStatus('error','Could not read from the server.','bad'); return; }
+
+  if(!remote){ await runPushForce(); return; }                 // first device wins, nothing to lose
+  const remoteChanged = remote.updated_at !== meta.syncedAt;
+
+  if(!meta.dirty){                                             // nothing local to lose
+    if(remoteChanged) adoptRemote(remote);
+    else setSyncStatus('synced','Up to date.','good');
+    return;
+  }
+  if(!remoteChanged){ await runPushForce(); return; }          // only this device moved
+  showConflict(remote);                                        // both moved - ask
+}
+async function runPushForce(){ meta.dirty=true; await runPush(); }
+
+function adoptRemote(remote){
+  const d=remote.data||{};
+  if(!Array.isArray(d.flights)){ setSyncStatus('error','Server copy looks malformed; keeping this device.','bad'); return; }
+  state=Object.assign(JSON.parse(JSON.stringify(BLANK)),d);
+  state.pilot=Object.assign({},BLANK.pilot,d.pilot||{});
+  meta.syncedAt=remote.updated_at; meta.dirty=false; storeMeta();
+  saveLocalOnly(); renderAll();
+  setSyncStatus('synced','Pulled '+state.flights.length+' flights from the server.','good');
+}
+
+function showConflict(remote){
+  const el=$('conflict');
+  const rd=remote.data||{}, rn=(rd.flights||[]).length, ln=state.flights.length;
+  el.innerHTML='<b>Two versions exist</b>This device has <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">'+
+    ln+' flight'+(ln===1?'':'s')+'</b> not yet sent. The server has <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">'+
+    rn+'</b>, changed elsewhere since this device last synced. Nothing has been overwritten.<br>'+
+    'Take a Backup link first if you want both.'+
+    '<button id="keeplocal">Keep this device</button><button class="sec" id="keepremote">Use the server copy</button>';
+  el.classList.remove('hidden');
+  setSyncStatus('pending','Waiting on you to resolve a conflict.','bad');
+  $('keeplocal').onclick=async()=>{ el.classList.add('hidden'); meta.syncedAt=remote.updated_at; storeMeta(); await runPushForce(); };
+  $('keepremote').onclick=()=>{ el.classList.add('hidden'); adoptRemote(remote); };
+}
+
+window.addEventListener('online',()=>{ if(session&&meta.dirty) runPush(); });
+$('s-signin').onclick=signIn;
+$('s-signup').onclick=signUp;
+$('s-signout').onclick=signOut;
+$('s-push').onclick=async()=>{ setSyncStatus(syncStatus,'Checking the server\u2026',''); await reconcile(); };
 
 /* ---------- print view ---------- */
 function buildPrint(){
