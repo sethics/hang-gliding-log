@@ -100,6 +100,18 @@
     color:var(--blue);border:1px solid #CBDCE9;background:#EAF0F5;border-radius:2px;padding:2px 6px}
   .fltlinks a:hover{background:#DCE8F1}
   .tag.with{background:#EDE7F3;color:#5B3E7A;border:1px solid #D5C7E4}
+
+  /* ---------- map ---------- */
+  #mapel{height:300px;border:1px solid var(--line);border-radius:2px;background:#EDF2F5}
+  #mapwrap{margin-bottom:6px}
+  .siterow{padding:9px 0;border-bottom:1px solid #E6EDF1}
+  .sitetop{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .sitename{font-weight:600;font-size:13.5px}
+  .sitenum{font-family:var(--mono);font-size:10.5px;color:var(--ink2);white-space:nowrap}
+  .sitebar{height:5px;background:#EDF2F5;border-radius:2px;margin-top:5px;overflow:hidden}
+  .sitebar i{display:block;height:100%;background:var(--blue);opacity:.75}
+  .sitemissing{font-family:var(--mono);font-size:10.5px;color:var(--tan);margin-top:4px}
+  .leaflet-container{font-family:var(--body)}
   .del{background:none;border:none;color:var(--ink3);font-size:19px;line-height:1;padding:0 2px;cursor:pointer}
   .empty{font-family:var(--mono);font-size:12.5px;color:var(--ink2);padding:18px 0;text-align:center}
 
@@ -201,7 +213,7 @@
   @media print{
     @page{margin:14mm 12mm}
     body{background:#fff;color:#000}
-    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer,#conflict{display:none!important}
+    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer,#conflict,#mapel{display:none!important}
     #printdoc{display:block!important}
     .pr-head{border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:11pt}
     .pr-title{font-family:var(--disp);text-transform:uppercase;font-size:23pt;letter-spacing:.02em;line-height:1}
@@ -404,6 +416,28 @@ Landing | https://we.tl/xxxx"></textarea>
     </div>
   </section>
 
+  <!-- ============ MAP ============ -->
+  <section id="tab-map" class="hidden">
+    <div class="card">
+      <h2>Where you've flown</h2>
+      <p class="note">Circles scale with flight count. Tap one for the totals. Map data &copy; OpenStreetMap contributors &mdash; free, no API key, no billing.</p>
+      <div id="mapwrap" class="hidden"><div id="mapel"></div></div>
+      <p class="note" id="mapnote"></p>
+      <div id="months"></div>
+      <div id="maplist"></div>
+    </div>
+    <div class="card hidden" id="coordbox">
+      <h2>Coordinates</h2>
+      <p class="note" id="coordfor"></p>
+      <div class="row">
+        <div><label for="c-lat">Latitude</label><input type="text" id="c-lat" inputmode="decimal" placeholder="34.8962"></div>
+        <div><label for="c-lon">Longitude</label><input type="text" id="c-lon" inputmode="decimal" placeholder="-85.4463"></div>
+      </div>
+      <p class="hint">In Google Maps, long-press the launch and copy the pair it shows. Southern and western values are negative.</p>
+      <div class="btnrow"><button class="ghost" id="c-save">Save</button><button class="ghost" id="c-here">Use my location</button><button class="ghost" id="c-close">Cancel</button></div>
+    </div>
+  </section>
+
   <!-- ============ REBUILD ============ -->
   <section id="tab-rebuild" class="hidden">
     <div class="card">
@@ -431,6 +465,7 @@ Landing | https://we.tl/xxxx"></textarea>
   <button data-tab="log" class="on"><svg viewBox="0 0 24 24"><path d="M4 5h11l5 5v9H4z"/><path d="M15 5v5h5"/><path d="M7 13h8M7 16h5"/></svg>Log</button>
   <button data-tab="prog"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>H3</button>
   <button data-tab="glide"><svg viewBox="0 0 24 24"><path d="M12 4 2 15h20z"/><path d="M12 4v11"/></svg>Gliders</button>
+  <button data-tab="map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Map</button>
   <button data-tab="rebuild"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>Rebuild</button>
 </nav>
 
@@ -529,6 +564,7 @@ const PRESETS=[{
 }];
 
 const BLANK={version:1,flights:[],gliders:[],tasks:{},rebuild:{},rebuildNotes:'',cur:0,steps:{},
+  sites:{},
   pilot:{name:'',num:'',rating:'H2',rdate:'',exp:'',skills:'',official:'',waiver:'',ice:'',notes:''}};
 let state=JSON.parse(JSON.stringify(BLANK));
 let editingId=null, tab='log', saveTimer=null;
@@ -559,6 +595,7 @@ async function load(){
   if(!storageOK) showStorageWarning(storageErr);
   else if(!found && !state.dismissedFirstRun) maybeFirstRunNote();
 
+  seedSites();
   if(!state.gliders.length){
     state.gliders=[
       Object.assign({},PRESETS[0],{id:uid(),name:'Falcon 170'}),
@@ -695,7 +732,7 @@ function stats(){
 const hm=h=>{const t=Math.round(h*60);return Math.floor(t/60)+'h '+String(t%60).padStart(2,'0')+'m';};
 
 /* ---------- render ---------- */
-function renderAll(){renderHeader();renderPilot();renderLog();renderProg();renderGliders();renderRebuild();}
+function renderAll(){renderHeader();renderPilot();renderLog();renderProg();renderGliders();renderRebuild();renderMonths();if(tab==='map')renderMap();}
 
 function renderPilot(){
   const p=state.pilot||{};
@@ -832,8 +869,9 @@ function renderRebuild(){
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   tab=b.dataset.tab;
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
-  ['log','prog','glide','rebuild'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==tab));
+  ['log','prog','glide','map','rebuild'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==tab));
   window.scrollTo(0,0);
+  if(tab==='map') renderMap();
 });
 
 $('fl-with').onchange=e=>{filterWith=e.target.value;renderLog();};
@@ -1370,6 +1408,139 @@ function renderFilterBar(){
     ' \u00b7 '+hm(mins/60)+' '+esc([who,where].filter(Boolean).join(' '))+
     '. <span style="color:var(--ink3)">Filtering the list only \u2014 the H3 gauges always count everything.</span>';
 }
+
+/* ---------- sites & map ----------
+   Leaflet + OpenStreetMap: no API key, no billing account, no quota to blow
+   through. Tiles need a connection, so the map degrades to a list offline -
+   deliberately, since nothing here is needed to log a flight. */
+
+const SITE_SEED=[
+ ['Lookout Mountain Flight Park',34.896227,-85.446301],
+ ['Lookout \u2014 training hill',34.896227,-85.446301],
+ ['Torrey Pines Gliderport',32.889867,-117.251201],
+ ['Soboba',33.818832,-116.961389],
+ ['Dockweiler Beach',33.920437,-118.430211],
+ ['Marshall / Crestline',34.236128,-117.313168],
+ ['Sylmar',34.317342,-118.407145],
+ ['Lake Elsinore',33.628494,-117.370369],
+ ['Blossom Valley',32.872535,-116.848172],
+ ['Point of the Mountain, UT',40.473247,-111.891257]
+];
+function seedSites(){
+  state.sites=state.sites||{};
+  SITE_SEED.forEach(s=>{ if(!state.sites[s[0]]) state.sites[s[0]]={lat:s[1],lon:s[2]}; });
+}
+function siteStats(){
+  const m={};
+  state.flights.forEach(f=>{
+    const n=(f.site||'').trim(); if(!n) return;
+    const e=m[n]||(m[n]={name:n,flights:0,mins:0,days:new Set(),solo:0});
+    e.flights++; e.mins+=(+f.min||0); e.days.add(f.date); if(f.solo) e.solo+=(+f.min||0);
+  });
+  return Object.values(m).map(e=>Object.assign(e,{days:e.days.size,
+    coord:(state.sites||{})[e.name]||null})).sort((a,b)=>b.flights-a.flights);
+}
+
+let map=null, layer=null, mapTried=false;
+function loadLeaflet(){
+  return new Promise((res,rej)=>{
+    if(window.L) return res(true);
+    const css=document.createElement('link');
+    css.rel='stylesheet'; css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const js=document.createElement('script');
+    js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload=()=>res(true); js.onerror=()=>rej(new Error('leaflet blocked'));
+    document.head.appendChild(js);
+  });
+}
+async function renderMap(){
+  const stats=siteStats(), mapped=stats.filter(s=>s.coord);
+  $('maplist').innerHTML=renderSiteList(stats);
+  if(!mapped.length){ $('mapwrap').classList.add('hidden'); $('mapnote').textContent=
+    state.flights.length?'None of your sites have coordinates yet. Add them below.':'Log a flight and its site will appear here.'; return; }
+  $('mapwrap').classList.remove('hidden'); $('mapnote').textContent='';
+  try{ await loadLeaflet(); }
+  catch(e){ $('mapwrap').classList.add('hidden');
+    $('mapnote').textContent='Map tiles could not load \u2014 offline, or the network blocked them. Your site totals are below regardless.'; return; }
+
+  if(!map){
+    map=L.map('mapel',{scrollWheelZoom:false});
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:17,attribution:'&copy; OpenStreetMap'}).addTo(map);
+  }
+  if(layer) layer.remove();
+  layer=L.layerGroup().addTo(map);
+  const max=Math.max.apply(null,mapped.map(s=>s.flights));
+  const pts=[];
+  mapped.forEach(s=>{
+    const r=8+18*Math.sqrt(s.flights/max);
+    L.circleMarker([s.coord.lat,s.coord.lon],{radius:r,color:'#8E1B54',weight:1.5,
+      fillColor:'#B3266B',fillOpacity:.55})
+     .bindPopup('<b>'+esc(s.name)+'</b><br>'+s.flights+' flight'+(s.flights===1?'':'s')+
+       ' \u00b7 '+s.days+' day'+(s.days===1?'':'s')+'<br>'+hm(s.mins/60)+' airtime')
+     .addTo(layer);
+    pts.push([s.coord.lat,s.coord.lon]);
+  });
+  map.fitBounds(L.latLngBounds(pts).pad(0.25),{maxZoom:9});
+  setTimeout(()=>map.invalidateSize(),60);
+}
+function renderSiteList(stats){
+  if(!stats.length) return '';
+  const max=Math.max.apply(null,stats.map(s=>s.mins))||1;
+  return '<h3>Every site you\u2019ve flown</h3>'+stats.map(s=>
+    '<div class="siterow" data-site="'+esc(s.name)+'">'+
+      '<div class="sitetop"><span class="sitename">'+esc(s.name)+'</span>'+
+      '<span class="sitenum">'+s.flights+' flt \u00b7 '+s.days+'d \u00b7 '+hm(s.mins/60)+'</span></div>'+
+      '<div class="sitebar"><i style="width:'+Math.max(2,(s.mins/max)*100)+'%"></i></div>'+
+      (s.coord?'':'<div class="sitemissing">No coordinates \u2014 <button class="linkbtn" data-setcoord="'+esc(s.name)+'">add them</button></div>')+
+    '</div>').join('');
+}
+
+/* ---- airtime by month, hand-rolled SVG ---- */
+function renderMonths(){
+  const m={};
+  state.flights.forEach(f=>{ const k=(f.date||'').slice(0,7); if(!k) return; m[k]=(m[k]||0)+(+f.min||0); });
+  const keys=Object.keys(m).sort();
+  if(keys.length<2){ $('months').innerHTML=''; return; }
+  const max=Math.max.apply(null,keys.map(k=>m[k]));
+  const W=Math.max(280,keys.length*34), H=110, bw=W/keys.length;
+  let bars='';
+  keys.forEach((k,i)=>{
+    const h=Math.max(2,(m[k]/max)*(H-26));
+    bars+='<rect x="'+(i*bw+3)+'" y="'+(H-20-h)+'" width="'+(bw-6)+'" height="'+h+'" fill="#2C5F8E" opacity="0.85"></rect>';
+    if(keys.length<=14||i%2===0)
+      bars+='<text x="'+(i*bw+bw/2)+'" y="'+(H-7)+'" text-anchor="middle" font-size="8" fill="#8AA0AE" font-family="monospace">'+k.slice(2).replace('-','/')+'</text>';
+  });
+  $('months').innerHTML='<h3>Airtime by month</h3><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+bars+'</svg>';
+}
+
+let coordSite=null;
+$('maplist').onclick=e=>{
+  const b=e.target.closest('[data-setcoord]'); if(!b) return;
+  coordSite=b.dataset.setcoord;
+  const c=(state.sites||{})[coordSite]||{};
+  $('c-lat').value=c.lat||''; $('c-lon').value=c.lon||'';
+  $('coordfor').textContent='Where is \u201c'+coordSite+'\u201d? Use the launch, not the LZ \u2014 it is what you will recognise on the map.';
+  $('coordbox').classList.remove('hidden');
+  $('coordbox').scrollIntoView({behavior:'smooth',block:'nearest'});
+};
+$('c-close').onclick=()=>{ $('coordbox').classList.add('hidden'); coordSite=null; };
+$('c-save').onclick=()=>{
+  const lat=parseFloat($('c-lat').value), lon=parseFloat($('c-lon').value);
+  if(!coordSite||!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){
+    chip('check those coordinates','bad'); return; }
+  state.sites=state.sites||{}; state.sites[coordSite]={lat:lat,lon:lon};
+  $('coordbox').classList.add('hidden'); coordSite=null;
+  save(); renderMap();
+};
+$('c-here').onclick=()=>{
+  if(!navigator.geolocation){ chip('no location available','bad'); return; }
+  chip('locating\u2026','');
+  navigator.geolocation.getCurrentPosition(
+    p=>{ $('c-lat').value=p.coords.latitude.toFixed(6); $('c-lon').value=p.coords.longitude.toFixed(6); chip('located','on'); },
+    ()=>chip('location refused','bad'), {enableHighAccuracy:true,timeout:10000});
+};
 
 /* ---------- print view ---------- */
 function buildPrint(){
