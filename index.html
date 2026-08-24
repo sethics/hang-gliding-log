@@ -87,6 +87,19 @@
     padding:1px 5px;border-radius:2px;margin-right:5px;vertical-align:1px}
   .tag.est{background:#F6EDDD;color:var(--tan);border:1px solid #E4CEA6}
   .tag.tan2{background:#EAF0F5;color:var(--blue);border:1px solid #CBDCE9}
+
+  /* ---------- flew-with, links, filters ---------- */
+  .hint{font-size:11.5px;color:var(--ink3);margin:5px 0 0;line-height:1.45}
+  .filterbar{display:flex;gap:7px;align-items:center;margin:2px 0 10px;flex-wrap:wrap}
+  .filterbar select{flex:1 1 120px;min-width:0;padding:8px;font-size:14px;font-family:var(--body);
+    background:#fff;border:1px solid var(--line);border-radius:2px;color:var(--ink);appearance:none}
+  .filterbar select.on{border-color:var(--mag);color:var(--mag);font-weight:600}
+  .filterbar button{flex:0 0 auto;padding:8px 10px}
+  .fltlinks{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
+  .fltlinks a{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;text-decoration:none;
+    color:var(--blue);border:1px solid #CBDCE9;background:#EAF0F5;border-radius:2px;padding:2px 6px}
+  .fltlinks a:hover{background:#DCE8F1}
+  .tag.with{background:#EDE7F3;color:#5B3E7A;border:1px solid #D5C7E4}
   .del{background:none;border:none;color:var(--ink3);font-size:19px;line-height:1;padding:0 2px;cursor:pointer}
   .empty{font-family:var(--mono);font-size:12.5px;color:var(--ink2);padding:18px 0;text-align:center}
 
@@ -298,16 +311,22 @@
           </select></div>
       </div>
       <datalist id="gliderlist"></datalist>
+      <div class="f"><label for="f-agl">Max AGL (ft)</label><input type="number" id="f-agl" min="0" placeholder="1500"></div>
       <div class="row">
-        <div><label for="f-agl">Max AGL (ft)</label><input type="number" id="f-agl" min="0" placeholder="1500"></div>
+        <div><label for="f-with">Flew with</label><input type="text" id="f-with" list="whos" placeholder="Dad"></div>
         <div><label for="f-witness">Instructor / witness</label><input type="text" id="f-witness" placeholder="John Heiney"></div>
       </div>
+      <datalist id="whos"></datalist>
       <div class="checkrow">
         <label class="chk"><input type="checkbox" id="f-solo" checked> Solo (counts toward the 10 hrs)</label>
         <label class="chk"><input type="checkbox" id="f-est"> Reconstructed</label>
       </div>
       <div class="f hidden" id="srcwrap"><label for="f-src">Where this came from</label>
         <input type="text" id="f-src" placeholder="Video timestamp / John's email 7/26 / photo EXIF"></div>
+      <div class="f"><label for="f-links">Video / photo links</label>
+        <textarea id="f-links" rows="2" placeholder="https://youtu.be/xxxx
+Landing | https://we.tl/xxxx"></textarea>
+        <p class="hint">One per line. Add <b>Label |</b> in front to name it. A dated video link is also evidence for a reconstructed flight.</p></div>
       <div class="f"><label for="f-notes">Conditions &amp; notes</label><textarea id="f-notes" rows="2" placeholder="Light cross, blew the flare"></textarea></div>
       <button class="primary" id="savebtn">Log it</button>
       <div class="btnrow hidden" id="cancelrow"><button class="ghost" id="cancelbtn">Cancel edit</button></div>
@@ -315,6 +334,12 @@
     <div class="card">
       <h2>Logbook</h2>
       <p class="note" id="logsummary"></p>
+      <div class="filterbar">
+        <select id="fl-with"></select>
+        <select id="fl-site"></select>
+        <button class="ghost" id="fl-clear">Clear</button>
+      </div>
+      <p class="note" id="filtersummary" style="display:none"></p>
       <div id="loglist"></div>
     </div>
   </section>
@@ -720,10 +745,13 @@ function renderLog(){
   const gl=$('gliderlist');
   gl.innerHTML=state.gliders.map(g=>`<option>${esc(g.name)}</option>`).join('');
 
+  renderFilterBar();
   const by={};
-  state.flights.forEach(f=>{(by[f.date]=by[f.date]||[]).push(f)});
+  visibleFlights().forEach(f=>{(by[f.date]=by[f.date]||[]).push(f)});
   const dates=Object.keys(by).sort().reverse();
-  if(!dates.length){$('loglist').innerHTML='<p class="empty">Your first entry can be a flight from last year.<br>Log it, tick Reconstructed, name the source.</p>';return;}
+  if(!dates.length){$('loglist').innerHTML=(filterWith||filterSite)
+    ? '<p class="empty">No flights match that filter.</p>'
+    : '<p class="empty">Your first entry can be a flight from last year.<br>Log it, tick Reconstructed, name the source.</p>';return;}
   $('loglist').innerHTML=dates.map(d=>{
     const list=by[d];
     const mins=list.reduce((a,f)=>a+(+f.min||0),0);
@@ -734,7 +762,7 @@ function renderLog(){
         <span class="fltdur">${(+f.min||0).toFixed(1)}<span style="font-size:9px">m</span></span>
         <span class="fltmain">
           <span class="fltsite">${esc(f.site||'—')}</span>
-          <span class="fltsub">${f.est?'<span class="tag est">est</span>':''}${!f.solo?'<span class="tag tan2">tandem</span>':''}${esc([f.glider,f.launch,f.agl?f.agl+' ft':''].filter(Boolean).join(' · '))}${f.witness?' · '+esc(f.witness):''}${f.src?'<br>source: '+esc(f.src):''}${f.notes?'<br>'+esc(f.notes):''}</span>
+          <span class="fltsub">${f.est?'<span class="tag est">est</span>':''}${!f.solo?'<span class="tag tan2">tandem</span>':''}${f.with?'<span class="tag with">with '+esc(f.with)+'</span>':''}${esc([f.glider,f.launch,f.agl?f.agl+' ft':''].filter(Boolean).join(' · '))}${f.witness?' · '+esc(f.witness):''}${f.src?'<br>source: '+esc(f.src):''}${f.notes?'<br>'+esc(f.notes):''}</span>${renderLinks(f.links)}
         </span>
         <button class="del" data-del="${f.id}" aria-label="Delete flight">×</button>
       </div>`).join('')+`</div>`;
@@ -808,6 +836,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   window.scrollTo(0,0);
 });
 
+$('fl-with').onchange=e=>{filterWith=e.target.value;renderLog();};
+$('fl-site').onchange=e=>{filterSite=e.target.value;renderLog();};
+$('fl-clear').onclick=()=>{filterWith='';filterSite='';renderLog();};
 $('f-est').onchange=e=>$('srcwrap').classList.toggle('hidden',!e.target.checked);
 
 $('savebtn').onclick=()=>{
@@ -818,6 +849,7 @@ $('savebtn').onclick=()=>{
     site:$('f-site').value.trim(), glider:$('f-glider').value.trim(),
     launch:$('f-launch').value, agl:$('f-agl').value.trim(),
     witness:$('f-witness').value.trim(), solo:$('f-solo').checked,
+    with:$('f-with').value.trim(), links:$('f-links').value.trim(),
     est:$('f-est').checked, src:$('f-src').value.trim(), notes:$('f-notes').value.trim()
   };
   if(editingId){ state.flights=state.flights.map(x=>x.id===editingId?f:x); }
@@ -830,7 +862,7 @@ $('savebtn').onclick=()=>{
 
 function resetForm(){
   editingId=null;
-  ['f-min','f-site','f-glider','f-agl','f-witness','f-src','f-notes'].forEach(i=>$(i).value='');
+  ['f-min','f-site','f-glider','f-agl','f-witness','f-src','f-notes','f-with','f-links'].forEach(i=>$(i).value='');
   $('f-solo').checked=true; $('f-est').checked=false;
   $('srcwrap').classList.add('hidden'); $('cancelrow').classList.add('hidden');
   $('formtitle').textContent='Add a flight'; $('savebtn').textContent='Log it';
@@ -849,6 +881,7 @@ $('loglist').onclick=e=>{
   $('f-glider').value=f.glider||''; $('f-launch').value=f.launch||'Foot — training hill';
   $('f-agl').value=f.agl||''; $('f-witness').value=f.witness||''; $('f-solo').checked=!!f.solo;
   $('f-est').checked=!!f.est; $('f-src').value=f.src||''; $('f-notes').value=f.notes||'';
+  $('f-with').value=f.with||''; $('f-links').value=f.links||'';
   $('srcwrap').classList.toggle('hidden',!f.est);
   $('formtitle').textContent='Edit flight'; $('savebtn').textContent='Save changes';
   $('formnote').textContent='Editing an existing entry.';
@@ -936,9 +969,10 @@ const csvrow=a=>a.map(q).join(',');
 const sortedFlights=()=>state.flights.slice().sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
 
 function flightsCSV(){
-  const head=['Date','Site','Glider','Launch','Minutes','Solo','MaxAGL','Reconstructed','Source','Witness','Notes'];
+  const head=['Date','Site','Glider','Launch','Minutes','Solo','MaxAGL','Reconstructed','Source','Witness','Flew with','Links','Notes'];
   return [csvrow(head)].concat(sortedFlights().map(f=>csvrow(
-    [f.date,f.site,f.glider,f.launch,f.min,f.solo?'solo':'tandem',f.agl,f.est?'yes':'',f.src,f.witness,f.notes]
+    [f.date,f.site,f.glider,f.launch,f.min,f.solo?'solo':'tandem',f.agl,f.est?'yes':'',f.src,f.witness,
+     f.with||'',(parseLinks(f.links).map(x=>x.url).join(' ')),f.notes]
   ))).join('\r\n');
 }
 
@@ -1279,6 +1313,64 @@ $('s-signup').onclick=signUp;
 $('s-signout').onclick=signOut;
 $('s-push').onclick=async()=>{ setSyncStatus(syncStatus,'Checking the server\u2026',''); await reconcile(); };
 
+/* ---------- flew-with, links, filtering ---------- */
+let filterWith='', filterSite='';
+
+/* Only http(s) is rendered as a link. A javascript: URL typed into the notes
+   would otherwise become a clickable script when this log is shared or printed. */
+function parseLinks(txt){
+  return (txt||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const i=l.indexOf('|');
+    const label=i>-1?l.slice(0,i).trim():'';
+    const url=(i>-1?l.slice(i+1):l).trim();
+    return {label:label,url:url};
+  }).filter(x=>/^https?:\/\//i.test(x.url));
+}
+function linkLabel(x){
+  if(x.label) return x.label;
+  try{ return new URL(x.url).hostname.replace(/^www\./,''); }catch(e){ return 'link'; }
+}
+function renderLinks(txt){
+  const ls=parseLinks(txt);
+  if(!ls.length) return '';
+  return '<span class="fltlinks">'+ls.map(x=>
+    '<a href="'+esc(x.url)+'" target="_blank" rel="noopener noreferrer">'+esc(linkLabel(x))+'</a>').join('')+'</span>';
+}
+
+function uniq(fn){
+  const s=new Set();
+  state.flights.forEach(f=>{ const v=(fn(f)||'').trim(); if(v) s.add(v); });
+  return Array.from(s).sort((a,b)=>a.localeCompare(b));
+}
+function visibleFlights(){
+  return state.flights.filter(f=>
+    (!filterWith || (f.with||'').trim()===filterWith) &&
+    (!filterSite || (f.site||'').trim()===filterSite));
+}
+function renderFilterBar(){
+  const w=$('fl-with'), si=$('fl-site');
+  const withs=uniq(f=>f.with), sites=uniq(f=>f.site);
+  w.innerHTML='<option value="">Anyone</option>'+withs.map(v=>
+    '<option value="'+esc(v)+'"'+(v===filterWith?' selected':'')+'>Flew with '+esc(v)+'</option>').join('');
+  si.innerHTML='<option value="">Any site</option>'+sites.map(v=>
+    '<option value="'+esc(v)+'"'+(v===filterSite?' selected':'')+'>'+esc(v)+'</option>').join('');
+  w.classList.toggle('on',!!filterWith); si.classList.toggle('on',!!filterSite);
+  w.parentNode.parentNode.querySelector('.filterbar').style.display = state.flights.length?'flex':'none';
+  $('whos').innerHTML=withs.map(v=>'<option>'+esc(v)+'</option>').join('');
+
+  const el=$('filtersummary');
+  if(!filterWith && !filterSite){ el.style.display='none'; return; }
+  const v=visibleFlights();
+  const days=new Set(v.map(f=>f.date)).size;
+  const mins=v.reduce((a,f)=>a+(+f.min||0),0);
+  const who=filterWith?'with '+filterWith:'';
+  const where=filterSite?'at '+filterSite:'';
+  el.style.display='block';
+  el.innerHTML='<b>'+v.length+' flight'+(v.length===1?'':'s')+'</b> over '+days+' day'+(days===1?'':'s')+
+    ' \u00b7 '+hm(mins/60)+' '+esc([who,where].filter(Boolean).join(' '))+
+    '. <span style="color:var(--ink3)">Filtering the list only \u2014 the H3 gauges always count everything.</span>';
+}
+
 /* ---------- print view ---------- */
 function buildPrint(){
   const s=stats(), p=state.pilot||{}, rows=sortedFlights();
@@ -1304,7 +1396,8 @@ function buildPrint(){
        '<th>Date</th><th>Site</th><th>Glider</th><th>Launch</th><th class="num">Min</th>'+
        '<th class="num">AGL</th><th>Type</th><th>Witness</th><th>Notes</th></tr></thead><tbody>';
     rows.forEach(f=>{
-      const note=[f.est?'\u2021 source: '+(f.src||'not stated'):'', f.notes||''].filter(Boolean).join(' \u2014 ');
+      const note=[f.est?'\u2021 source: '+(f.src||'not stated'):'', f.with?'with '+f.with:'', f.notes||'',
+        parseLinks(f.links).map(x=>x.url).join('  ')].filter(Boolean).join(' \u2014 ');
       h+='<tr><td class="nw">'+esc(fmtShort(f.date))+(f.est?' \u2021':'')+'</td>'+
          cell(f.site)+cell(f.glider)+cell(f.launch)+
          '<td class="num">'+(+f.min||0).toFixed(1)+'</td>'+
