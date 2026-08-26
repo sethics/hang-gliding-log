@@ -1287,8 +1287,12 @@ async function pushRemote(){
   return true;
 }
 function queuePush(){
+  /* Mark dirty BEFORE the session check. Work done while signed out is still
+     work - if it stayed clean, the next sign-in would see nothing pending,
+     adopt the server copy, and silently bin it. */
+  meta.dirty=true; storeMeta();
   if(!session) return;
-  meta.dirty=true; storeMeta(); setSyncStatus('pending');
+  setSyncStatus('pending');
   clearTimeout(pushTimer);
   pushTimer=setTimeout(runPush,1200);
 }
