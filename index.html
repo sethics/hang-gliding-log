@@ -618,7 +618,9 @@ async function load(){
   renderSaveState();
   renderAll();
 
-  loadSession(); renderSyncCard();
+  loadSession();
+  await adoptAuthHash();
+  renderSyncCard();
   if(session){
     setSyncStatus('pending','Checking the server\u2026','');
     try{ await reconcile(); }catch(e){ setSyncStatus('error','Could not reach the server.','bad'); }
@@ -1545,6 +1547,43 @@ $('c-here').onclick=()=>{
     p=>{ $('c-lat').value=p.coords.latitude.toFixed(6); $('c-lon').value=p.coords.longitude.toFixed(6); chip('located','on'); },
     ()=>chip('location refused','bad'), {enableHighAccuracy:true,timeout:10000});
 };
+
+/* Supabase hands back a session in the URL fragment after email confirmation
+   or a password reset. Adopt it, then strip it from the address bar - tokens
+   in URLs leak into history, bookmarks and screenshots. */
+async function adoptAuthHash(){
+  const h=location.hash||'';
+  if(h.indexOf('access_token=')===-1 && h.indexOf('error=')===-1) return false;
+  const p=new URLSearchParams(h.replace(/^#/,''));
+  history.replaceState(null,'',location.pathname+location.search);
+
+  const err=p.get('error_description')||p.get('error');
+  if(err && !p.get('access_token')){
+    setSyncStatus('error',decodeURIComponent(err).replace(/\+/g,' ')+' \u2014 try signing in, or request a new link.','bad');
+    $('datapanel').classList.remove('hidden');
+    return false;
+  }
+  const at=p.get('access_token'); if(!at) return false;
+  session={access_token:at, refresh_token:p.get('refresh_token'),
+    expires_at:Math.floor(Date.now()/1000)+parseInt(p.get('expires_in')||'3600',10),
+    user_id:null, email:null};
+  try{
+    const r=await fetch(SUPA_URL+'/auth/v1/user',
+      {headers:{apikey:SUPA_KEY,'Authorization':'Bearer '+at}});
+    if(!r.ok) throw new Error('user '+r.status);
+    const u=await r.json();
+    session.user_id=u.id; session.email=u.email;
+    storeSession();
+    $('datapanel').classList.remove('hidden');
+    setSyncStatus('pending','Signed in as '+u.email+' from your email link.','good');
+    return true;
+  }catch(e){
+    session=null;
+    setSyncStatus('error','That link is no longer valid. Sign in with your email and password.','bad');
+    $('datapanel').classList.remove('hidden');
+    return false;
+  }
+}
 
 /* ---------- print view ---------- */
 function buildPrint(){
