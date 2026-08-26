@@ -289,12 +289,13 @@
       <button class="ghost" id="expjson">Backup JSON</button>
       <button class="ghost" id="explink">Backup link</button>
       <button class="ghost" id="printbtn">Print / PDF</button>
+      <button class="ghost" id="addcsv">Add flights (paste CSV)</button>
       <button class="ghost" id="impbtn">Restore from JSON</button>
     </div>
     <div class="f hidden" id="iobox" style="margin-top:12px">
       <label id="iolabel">Copy this</label>
       <textarea id="ioarea" rows="7"></textarea>
-      <div class="btnrow"><button class="ghost" id="iodo">Restore</button><button class="ghost" id="iocopy">Copy</button><button class="ghost" id="ioclose">Close</button></div>
+      <div class="btnrow"><button class="ghost" id="iodo">Restore</button><button class="ghost" id="csvdo">Add these flights</button><button class="ghost" id="iocopy">Copy</button><button class="ghost" id="ioclose">Close</button></div>
     </div>
   </div>
 
@@ -971,11 +972,13 @@ $('edel').onclick=()=>{if(!confirm('Delete this glider and its checklists?'))ret
 
 /* ---------- data io ---------- */
 $('databtn').onclick=()=>$('datapanel').classList.toggle('hidden');
-function showIO(label,text,restore){
+function showIO(label,text,restore,mode){
   $('iobox').classList.remove('hidden');$('iolabel').textContent=label;
-  $('ioarea').value=text;$('iodo').classList.toggle('hidden',!restore);
-  $('iocopy').classList.toggle('hidden',restore);
-  if(!restore){$('ioarea').select();}
+  $('ioarea').value=text;
+  $('iodo').classList.toggle('hidden',!restore);
+  $('csvdo').classList.toggle('hidden',mode!=='csv');
+  $('iocopy').classList.toggle('hidden',restore||mode==='csv');
+  if(!restore&&mode!=='csv'){$('ioarea').select();}
 }
 $('ioclose').onclick=()=>$('iobox').classList.add('hidden');
 $('iocopy').onclick=async()=>{
@@ -1584,6 +1587,61 @@ async function adoptAuthHash(){
     return false;
   }
 }
+
+/* ---------- bulk import ----------
+   Accepts the same CSV this app exports, so the loop is: export, edit in a
+   spreadsheet, paste back. Appends - never replaces - because the whole point
+   of backfilling is adding to what you already have. */
+function parseCSV(text){
+  const rows=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; }
+      else cur+=c;
+    } else if(c==='"') q=true;
+    else if(c===','){ row.push(cur); cur=''; }
+    else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+    else if(c!=='\r') cur+=c;
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(v=>v.trim()!==''));
+}
+function importCSV(text){
+  const rows=parseCSV(text);
+  if(rows.length<2) return {added:0,skipped:0,error:'Needs a header row and at least one flight.'};
+  const head=rows[0].map(h=>h.trim().toLowerCase());
+  const col=n=>head.indexOf(n);
+  const iDate=col('date');
+  if(iDate<0) return {added:0,skipped:0,error:'No "Date" column found in the header row.'};
+  const g=(r,n)=>{ const i=col(n); return i<0?'':(r[i]||'').trim(); };
+  const key=f=>[f.date,(f.site||'').toLowerCase(),f.min,(f.launch||'').toLowerCase()].join('|');
+  const seen=new Set(state.flights.map(key));
+  let added=0, skipped=0;
+  rows.slice(1).forEach(r=>{
+    const date=(r[iDate]||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ skipped++; return; }
+    const solo=g(r,'solo').toLowerCase();
+    const f={id:uid(), date:date, min:parseFloat(g(r,'minutes'))||0,
+      site:g(r,'site'), glider:g(r,'glider'), launch:g(r,'launch'),
+      agl:g(r,'maxagl')||g(r,'max agl'), witness:g(r,'witness'),
+      solo: solo==='' ? true : !(solo==='tandem'||solo==='no'||solo==='false'),
+      est: ['yes','y','true','1'].indexOf(g(r,'reconstructed').toLowerCase())>-1,
+      src:g(r,'source'), with:g(r,'flew with'), links:g(r,'links'), notes:g(r,'notes')};
+    if(seen.has(key(f))){ skipped++; return; }
+    seen.add(key(f)); state.flights.push(f); added++;
+  });
+  return {added:added,skipped:skipped,error:''};
+}
+$('addcsv').onclick=()=>showIO('Paste CSV with a header row \u2014 same columns as Flights CSV','',false,'csv');
+$('csvdo').onclick=()=>{
+  const res=importCSV($('ioarea').value);
+  if(res.error){ chip(res.error,'bad'); return; }
+  if(!res.added && !res.skipped){ chip('nothing recognised','bad'); return; }
+  $('iobox').classList.add('hidden');
+  save(); renderHeader(); renderLog(); renderProg(); renderMonths();
+  chip('added '+res.added+(res.skipped?', skipped '+res.skipped+' duplicate/bad':''),'on');
+};
 
 /* ---------- print view ---------- */
 function buildPrint(){
