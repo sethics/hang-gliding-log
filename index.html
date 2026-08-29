@@ -1641,8 +1641,13 @@ function importCSV(text){
   const iDate=col('date');
   if(iDate<0) return {added:0,skipped:0,error:'No "Date" column found in the header row.'};
   const g=(r,n)=>{ const i=col(n); return i<0?'':(r[i]||'').trim(); };
+  /* Repeat flights are normal - three identical sled runs in a morning are three
+     flights, not one. So compare COUNTS per signature rather than presence:
+     import however many more of a signature the file has than the log already
+     holds. Three new runs all import; re-dropping the same file adds nothing. */
   const key=f=>[f.date,(f.site||'').toLowerCase(),f.min,(f.launch||'').toLowerCase()].join('|');
-  const seen=new Set(state.flights.map(key));
+  const have={};
+  state.flights.forEach(f=>{ const k=key(f); have[k]=(have[k]||0)+1; });
   let added=0, skipped=0;
   rows.slice(1).forEach(r=>{
     const date=(r[iDate]||'').trim();
@@ -1654,8 +1659,9 @@ function importCSV(text){
       solo: solo==='' ? true : !(solo==='tandem'||solo==='no'||solo==='false'),
       est: ['yes','y','true','1'].indexOf(g(r,'reconstructed').toLowerCase())>-1,
       src:g(r,'source'), with:g(r,'flew with'), links:g(r,'links'), notes:g(r,'notes')};
-    if(seen.has(key(f))){ skipped++; return; }
-    seen.add(key(f)); state.flights.push(f); added++;
+    const k=key(f);
+    if(have[k]>0){ have[k]--; skipped++; return; }   // already in the log
+    state.flights.push(f); added++;
   });
   return {added:added,skipped:skipped,error:''};
 }
