@@ -112,6 +112,21 @@
   .sitebar i{display:block;height:100%;background:var(--blue);opacity:.75}
   .sitemissing{font-family:var(--mono);font-size:10.5px;color:var(--tan);margin-top:4px}
   .leaflet-container{font-family:var(--body)}
+
+  /* ---------- file drop ---------- */
+  #dropzone{position:fixed;inset:0;z-index:60;background:rgba(15,34,48,.82);
+    display:none;align-items:center;justify-content:center;padding:24px}
+  #dropzone.on{display:flex}
+  #dropzone .inner{border:2px dashed #B3266B;border-radius:4px;background:#FBFCFD;
+    padding:30px 26px;text-align:center;max-width:420px}
+  #dropzone b{display:block;font-family:var(--disp);text-transform:uppercase;font-size:24px;
+    letter-spacing:.03em;margin-bottom:7px;font-weight:600;color:var(--ink)}
+  #dropzone span{font-size:13px;color:var(--ink2);line-height:1.5}
+  .filerow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+  .filerow .ghost{flex:0 0 auto}
+  .fileinfo{font-family:var(--mono);font-size:11px;color:var(--ink2)}
+  .fileinfo.bad{color:var(--mag)}
+  .fileinfo.good{color:var(--good)}
   .del{background:none;border:none;color:var(--ink3);font-size:19px;line-height:1;padding:0 2px;cursor:pointer}
   .empty{font-family:var(--mono);font-size:12.5px;color:var(--ink2);padding:18px 0;text-align:center}
 
@@ -213,7 +228,7 @@
   @media print{
     @page{margin:14mm 12mm}
     body{background:#fff;color:#000}
-    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer,#conflict,#mapel{display:none!important}
+    .wrap,nav,#storagewarn,#firstrun,#ephwarn,#restoreoffer,#conflict,#mapel,#dropzone{display:none!important}
     #printdoc{display:block!important}
     .pr-head{border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:11pt}
     .pr-title{font-family:var(--disp);text-transform:uppercase;font-size:23pt;letter-spacing:.02em;line-height:1}
@@ -289,7 +304,12 @@
       <button class="ghost" id="expjson">Backup JSON</button>
       <button class="ghost" id="explink">Backup link</button>
       <button class="ghost" id="printbtn">Print / PDF</button>
-      <button class="ghost" id="addcsv">Add flights (paste CSV)</button>
+      <div class="filerow" id="filerow">
+        <button class="ghost" id="pickfile">Choose a CSV file</button>
+        <span class="fileinfo" id="fileinfo">or drag one anywhere onto this page</span>
+      </div>
+      <input type="file" id="fileinput" accept=".csv,.json,text/csv,application/json" class="hidden">
+      <button class="ghost" id="addcsv">Or paste CSV text</button>
       <button class="ghost" id="impbtn">Restore from JSON</button>
     </div>
     <div class="f hidden" id="iobox" style="margin-top:12px">
@@ -461,6 +481,12 @@ Landing | https://we.tl/xxxx"></textarea>
 </div>
 
 <div id="printdoc"></div>
+
+<div id="dropzone"><div class="inner">
+  <b>Drop to import</b>
+  <span>A <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">.csv</b> of flights gets added to your log.
+  A <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">.json</b> backup replaces it.</span>
+</div></div>
 
 <nav>
   <button data-tab="log" class="on"><svg viewBox="0 0 24 24"><path d="M4 5h11l5 5v9H4z"/><path d="M15 5v5h5"/><path d="M7 13h8M7 16h5"/></svg>Log</button>
@@ -1642,6 +1668,78 @@ $('csvdo').onclick=()=>{
   save(); renderHeader(); renderLog(); renderProg(); renderMonths();
   chip('added '+res.added+(res.skipped?', skipped '+res.skipped+' duplicate/bad':''),'on');
 };
+
+/* ---------- file picker + drag and drop ----------
+   Dragging a file onto the page is the affordance people actually reach for,
+   so the drop target is the whole window rather than a small zone. Extension
+   decides the route: .csv appends flights, .json restores a backup. */
+
+function setFileInfo(msg,cls){ const e=$('fileinfo'); e.textContent=msg; e.className='fileinfo '+(cls||''); }
+
+function looksLikeJSON(name,text){
+  if(/\.json$/i.test(name)) return true;
+  const t=text.replace(/^\uFEFF/,'').trim();
+  return t.charAt(0)==='{';
+}
+
+function handleFileText(name,text){
+  $('datapanel').classList.remove('hidden');
+  if(looksLikeJSON(name,text)){
+    let d=null;
+    try{ d=JSON.parse(text.replace(/^\uFEFF/,'')); }catch(e){}
+    if(!d||!Array.isArray(d.flights)){
+      setFileInfo(name+' is not a logbook backup','bad');
+      chip('unrecognised JSON','bad'); return;
+    }
+    showIO('Backup from '+esc(name)+' \u2014 '+d.flights.length+
+           ' flights. Restoring REPLACES everything currently in this log.',text,true);
+    setFileInfo(name+' loaded \u2014 press Restore to replace your log','good');
+    return;
+  }
+  const rows=parseCSV(text.replace(/^\uFEFF/,''));
+  const n=Math.max(0,rows.length-1);
+  if(n<1){ setFileInfo(name+' has no data rows','bad'); chip('nothing to import','bad'); return; }
+  showIO('From '+esc(name)+' \u2014 '+n+' row'+(n===1?'':'s')+
+         '. Check it, then press Add these flights.',text,false,'csv');
+  setFileInfo(name+' loaded \u2014 '+n+' row'+(n===1?'':'s')+' ready','good');
+}
+
+function readFile(file){
+  if(!file) return;
+  if(file.size>3*1024*1024){ setFileInfo('That file is too large to be a logbook','bad'); return; }
+  const fr=new FileReader();
+  fr.onload=()=>handleFileText(file.name,String(fr.result||''));
+  fr.onerror=()=>{ setFileInfo('Could not read '+file.name,'bad'); };
+  fr.readAsText(file);
+}
+
+$('pickfile').onclick=()=>$('fileinput').click();
+$('fileinput').onchange=e=>{ readFile(e.target.files&&e.target.files[0]); e.target.value=''; };
+
+/* window-wide drop. dragleave fires constantly while moving over children, so
+   count enter/leave pairs rather than trusting a single leave event. */
+let dragDepth=0;
+function hasFiles(e){
+  const dt=e.dataTransfer; if(!dt) return false;
+  if(dt.types) for(let i=0;i<dt.types.length;i++) if(dt.types[i]==='Files') return true;
+  return false;
+}
+window.addEventListener('dragenter',e=>{
+  if(!hasFiles(e)) return;
+  e.preventDefault(); dragDepth++; $('dropzone').classList.add('on');
+});
+window.addEventListener('dragover',e=>{ if(hasFiles(e)){ e.preventDefault(); e.dataTransfer.dropEffect='copy'; } });
+window.addEventListener('dragleave',e=>{
+  if(!hasFiles(e)) return;
+  dragDepth=Math.max(0,dragDepth-1);
+  if(!dragDepth) $('dropzone').classList.remove('on');
+});
+window.addEventListener('drop',e=>{
+  if(!hasFiles(e)) return;
+  e.preventDefault(); dragDepth=0; $('dropzone').classList.remove('on');
+  const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(f) readFile(f);
+});
 
 /* ---------- print view ---------- */
 function buildPrint(){
